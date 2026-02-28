@@ -13,7 +13,7 @@ open $PROJECT_ROOT/src/index.html
 
 # Build single-file dist
 bash $PROJECT_ROOT/build.sh
-# Output: $PROJECT_ROOT/dist/kaomoji-markdown-design.html (150KB)
+# Output: $PROJECT_ROOT/dist/kaomoji-markdown-design.html (165KB)
 ```
 
 **Key Files:**
