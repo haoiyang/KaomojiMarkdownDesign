@@ -1,0 +1,3848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KaomojiMarkdownDesign — ASCII Wireframe Editor</title>
+<style>
+/* === Reset & Base === */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    display: flex;
+    flex-direction: column;
+}
+
+/* === Toolbar === */
+#toolbar {
+    display: flex;
+    align-items: center;
+    height: 40px;
+    background: #11111b;
+    border-bottom: 1px solid #313244;
+    padding: 0 12px;
+    gap: 8px;
+    flex-shrink: 0;
+    user-select: none;
+}
+#toolbar .logo {
+    font-weight: 700;
+    font-size: 14px;
+    color: #cba6f7;
+    margin-right: 16px;
+    white-space: nowrap;
+}
+#toolbar .spacer { flex: 1; }
+.toolbar-btn {
+    background: #313244;
+    border: 1px solid #45475a;
+    color: #cdd6f4;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.toolbar-btn:hover { background: #45475a; }
+.toolbar-btn.primary { background: #89b4fa; color: #1e1e2e; border-color: #89b4fa; }
+.toolbar-btn.primary:hover { background: #b4befe; }
+
+/* === Main Layout === */
+#main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* === Left Panel === */
+#left-panel {
+    width: 160px;
+    background: #1e1e2e;
+    border-right: none;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+/* === Resizable Splitters === */
+.panel-splitter {
+    width: 4px;
+    background: #313244;
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+.panel-splitter:hover, .panel-splitter.active {
+    background: #89b4fa;
+}
+.panel-section {
+    border-bottom: 1px solid #313244;
+}
+.panel-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6c7086;
+    padding: 8px 10px 4px;
+}
+.panel-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #cdd6f4;
+}
+.panel-item:hover { background: #313244; }
+.panel-item.active { background: #45475a; color: #89b4fa; }
+.panel-item .icon {
+    width: 18px;
+    text-align: center;
+    font-family: "Courier New", monospace;
+    font-size: 13px;
+}
+.panel-item .shortcut {
+    margin-left: auto;
+    font-size: 10px;
+    color: #6c7086;
+}
+.elem-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    cursor: grab;
+    font-size: 12px;
+    color: #cdd6f4;
+}
+.elem-item:hover { background: #313244; }
+.elem-item .preview {
+    font-family: "Courier New", monospace;
+    font-size: 11px;
+    color: #a6adc8;
+    white-space: nowrap;
+}
+
+/* === Canvas Area === */
+#canvas-area {
+    flex: 1;
+    overflow: auto;
+    background: #11111b;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 16px;
+    position: relative;
+}
+#grid-canvas {
+    cursor: crosshair;
+    image-rendering: pixelated;
+}
+
+/* === Right Panel === */
+#right-panel {
+    width: 200px;
+    background: #1e1e2e;
+    border-left: none;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex-shrink: 0;
+    user-select: none;
+}
+.prop-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 10px;
+    gap: 6px;
+}
+.prop-label {
+    font-size: 11px;
+    color: #6c7086;
+    width: 50px;
+    flex-shrink: 0;
+}
+.prop-input {
+    flex: 1;
+    background: #313244;
+    border: 1px solid #45475a;
+    color: #cdd6f4;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: "Courier New", monospace;
+}
+.prop-input:focus { outline: none; border-color: #89b4fa; }
+.prop-select {
+    flex: 1;
+    background: #313244;
+    border: 1px solid #45475a;
+    color: #cdd6f4;
+    padding: 3px 6px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+.prop-select:focus { outline: none; border-color: #89b4fa; }
+
+/* Layer items */
+.layer-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.layer-item:hover { background: #313244; }
+.layer-item.selected { background: #45475a; }
+.layer-item .vis-toggle {
+    cursor: pointer;
+    font-size: 10px;
+    width: 14px;
+    text-align: center;
+}
+.layer-item .layer-name {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.layer-item .layer-actions {
+    display: flex;
+    gap: 2px;
+}
+.layer-btn {
+    background: none;
+    border: none;
+    color: #6c7086;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 1px 3px;
+    border-radius: 2px;
+}
+.layer-btn:hover { color: #cdd6f4; background: #45475a; }
+
+/* === Status Bar === */
+#statusbar {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    background: #11111b;
+    border-top: 1px solid #313244;
+    padding: 0 12px;
+    font-size: 11px;
+    color: #a6adc8;
+    gap: 16px;
+    flex-shrink: 0;
+    user-select: none;
+}
+.status-item { white-space: nowrap; }
+
+/* === Toast Notification === */
+.toast {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #313244;
+    color: #cdd6f4;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    z-index: 9999;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* === Inline Text Edit === */
+#inline-editor {
+    position: absolute;
+    display: none;
+    background: transparent;
+    border: 1px solid #89b4fa;
+    color: #cdd6f4;
+    font-family: "Courier New", "Courier", monospace;
+    padding: 0;
+    outline: none;
+    resize: none;
+    overflow: hidden;
+    z-index: 100;
+    caret-color: #f5c2e7;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #1e1e2e; }
+::-webkit-scrollbar-thumb { background: #45475a; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #585b70; }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+    <span class="logo">◆ KaomojiMarkdownDesign</span>
+    <div class="spacer"></div>
+    <button class="toolbar-btn primary" id="btn-copy-md" title="Copy as Markdown (Ctrl+Shift+C)">Copy</button>
+    <button class="toolbar-btn" id="btn-paste-md" title="Paste Markdown from clipboard (Ctrl+Shift+V)">Paste</button>
+    <button class="toolbar-btn" id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
+    <button class="toolbar-btn" id="btn-redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    <button class="toolbar-btn" id="btn-save" title="Save to file (Ctrl+S)">Save</button>
+    <button class="toolbar-btn" id="btn-load" title="Load from file">Load</button>
+    <button class="toolbar-btn" id="btn-new" title="Clear canvas (Ctrl+N)">Refresh</button>
+</div>
+
+<!-- Main area -->
+<div id="main">
+    <!-- Left panel: tools + elements -->
+    <div id="left-panel">
+        <div class="panel-section" id="tools-section">
+            <div class="panel-header">Tools</div>
+        </div>
+        <div class="panel-section" id="elements-section">
+            <div class="panel-header">Elements</div>
+        </div>
+    </div>
+
+    <!-- Left splitter -->
+    <div class="panel-splitter" id="left-splitter"></div>
+
+    <!-- Canvas -->
+    <div id="canvas-area">
+        <canvas id="grid-canvas"></canvas>
+        <textarea id="inline-editor" spellcheck="false"></textarea>
+    </div>
+
+    <!-- Right splitter -->
+    <div class="panel-splitter" id="right-splitter"></div>
+
+    <!-- Right panel: inspector + layers -->
+    <div id="right-panel">
+        <div class="panel-section" id="inspector-section">
+            <div class="panel-header">Inspector</div>
+            <div id="inspector-content">
+                <div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>
+            </div>
+        </div>
+        <div class="panel-section" id="layers-section">
+            <div class="panel-header">Layers</div>
+            <div id="layers-content"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">
+    <span class="status-item" id="status-pos">Ln 1, Col 1</span>
+    <span class="status-item" id="status-grid">80×40</span>
+    <span class="status-item" id="status-count">Components: 0</span>
+    <span class="status-item" id="status-tool">Select</span>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Scripts (in dependency order) -->
+<!-- INJECT_JS_START -->
+<script>
+// --- utils/constants.js ---
+// === Constants ===
+const GRID_COLS = 80;
+const GRID_ROWS = 40;
+const DEFAULT_FONT_FAMILY = '"Courier New", "Courier", monospace';
+const DEFAULT_FONT_SIZE = 14;
+const MAX_UNDO_LEVELS = 50;
+
+// Colors (dark theme)
+const COLORS = {
+    bg: '#1e1e2e',
+    gridLine: '#313244',
+    cellBg: '#181825',
+    text: '#cdd6f4',
+    textDim: '#6c7086',
+    cursor: '#f5c2e7',
+    selection: 'rgba(137, 180, 250, 0.25)',
+    selectionBorder: '#89b4fa',
+    handle: '#f38ba8',
+    handleFill: '#1e1e2e',
+    panelBg: '#1e1e2e',
+    panelBorder: '#313244',
+    panelText: '#cdd6f4',
+    panelTextDim: '#6c7086',
+    panelHover: '#313244',
+    panelActive: '#45475a',
+    accent: '#89b4fa',
+    accentHover: '#b4befe',
+    toolbarBg: '#11111b',
+    statusBg: '#11111b',
+    statusText: '#a6adc8',
+    error: '#f38ba8',
+    success: '#a6e3a1',
+    warning: '#f9e2af',
+};
+
+// Keyboard shortcuts
+const SHORTCUTS = {
+    'ctrl+z': 'undo',
+    'meta+z': 'undo',
+    'ctrl+shift+z': 'redo',
+    'meta+shift+z': 'redo',
+    'ctrl+y': 'redo',
+    'meta+y': 'redo',
+    'ctrl+c': 'copy',
+    'meta+c': 'copy',
+    'ctrl+v': 'paste',
+    'meta+v': 'paste',
+    'ctrl+x': 'cut',
+    'meta+x': 'cut',
+    'ctrl+a': 'selectAll',
+    'meta+a': 'selectAll',
+    'ctrl+s': 'save',
+    'meta+s': 'save',
+    'ctrl+shift+s': 'saveAs',
+    'meta+shift+s': 'saveAs',
+    'ctrl+n': 'new',
+    'meta+n': 'new',
+    'ctrl+shift+c': 'copyMarkdown',
+    'meta+shift+c': 'copyMarkdown',
+    'ctrl+shift+v': 'pasteMarkdown',
+    'meta+shift+v': 'pasteMarkdown',
+    'Delete': 'delete',
+    'Backspace': 'delete',
+    'Escape': 'deselect',
+    'v': 'tool:select',
+    't': 'tool:text',
+    'l': 'tool:line',
+    'a': 'tool:arrow',
+    'e': 'tool:eraser',
+    'r': 'rotate',
+};
+
+// Tool definitions
+const TOOL_DEFS = [
+    { id: 'select', label: 'Select', shortcut: 'V', icon: '⊹' },
+    { id: 'text', label: 'Text', shortcut: 'T', icon: 'T' },
+    { id: 'line', label: 'Line', shortcut: 'L', icon: '━' },
+    { id: 'arrow', label: 'Arrow', shortcut: 'A', icon: '➜' },
+    { id: 'eraser', label: 'Eraser', shortcut: 'E', icon: '⌫' },
+];
+
+// Border style names
+const BORDER_STYLES = ['single', 'heavy', 'double', 'rounded', 'ascii'];
+
+// --- utils/boxdraw.js ---
+// === Box-Drawing Character Lookup Tables ===
+// BORDER_CHARS[style][position] → character
+// Positions: tl, t, tr, l, r, bl, b, br, h, v, cross, tee_down, tee_up, tee_right, tee_left
+
+const BORDER_CHARS = {
+    single: {
+        tl: '┌', t: '─', tr: '┐',
+        l: '│', r: '│',
+        bl: '└', b: '─', br: '┘',
+        h: '─', v: '│',
+        cross: '┼',
+        tee_down: '┬', tee_up: '┴',
+        tee_right: '├', tee_left: '┤',
+    },
+    heavy: {
+        tl: '┏', t: '━', tr: '┓',
+        l: '┃', r: '┃',
+        bl: '┗', b: '━', br: '┛',
+        h: '━', v: '┃',
+        cross: '╋',
+        tee_down: '┳', tee_up: '┻',
+        tee_right: '┣', tee_left: '┫',
+    },
+    double: {
+        tl: '╔', t: '═', tr: '╗',
+        l: '║', r: '║',
+        bl: '╚', b: '═', br: '╝',
+        h: '═', v: '║',
+        cross: '╬',
+        tee_down: '╦', tee_up: '╩',
+        tee_right: '╠', tee_left: '╣',
+    },
+    rounded: {
+        tl: '╭', t: '─', tr: '╮',
+        l: '│', r: '│',
+        bl: '╰', b: '─', br: '╯',
+        h: '─', v: '│',
+        cross: '┼',
+        tee_down: '┬', tee_up: '┴',
+        tee_right: '├', tee_left: '┤',
+    },
+    ascii: {
+        tl: '+', t: '-', tr: '+',
+        l: '|', r: '|',
+        bl: '+', b: '-', br: '+',
+        h: '-', v: '|',
+        cross: '+',
+        tee_down: '+', tee_up: '+',
+        tee_right: '+', tee_left: '+',
+    },
+};
+
+// Arrow characters for line endings
+const ARROW_CHARS = {
+    right: '→',
+    left: '←',
+    up: '↑',
+    down: '↓',
+};
+
+// Helper: safe char set — only writes if within bounds
+function _safeSet(chars, r, c, ch) {
+    if (r >= 0 && r < chars.length && c >= 0 && c < chars[r].length) {
+        chars[r][c] = ch;
+    }
+}
+
+// Helper: draw a box outline onto a 2D char array
+function drawBox(chars, x, y, w, h, style = 'single') {
+    const bc = BORDER_CHARS[style] || BORDER_CHARS.single;
+    if (w < 2 || h < 2) return;
+
+    // Top edge
+    _safeSet(chars, y, x, bc.tl);
+    for (let c = x + 1; c < x + w - 1; c++) _safeSet(chars, y, c, bc.t);
+    _safeSet(chars, y, x + w - 1, bc.tr);
+
+    // Sides
+    for (let r = y + 1; r < y + h - 1; r++) {
+        _safeSet(chars, r, x, bc.l);
+        _safeSet(chars, r, x + w - 1, bc.r);
+    }
+
+    // Bottom edge
+    _safeSet(chars, y + h - 1, x, bc.bl);
+    for (let c = x + 1; c < x + w - 1; c++) _safeSet(chars, y + h - 1, c, bc.b);
+    _safeSet(chars, y + h - 1, x + w - 1, bc.br);
+}
+
+// Helper: draw a horizontal divider across a box
+function drawHDivider(chars, x, w, row, style = 'single') {
+    const bc = BORDER_CHARS[style] || BORDER_CHARS.single;
+    if (row < 0 || row >= chars.length) return;
+    _safeSet(chars, row, x, bc.tee_right);
+    for (let c = x + 1; c < x + w - 1; c++) _safeSet(chars, row, c, bc.h);
+    _safeSet(chars, row, x + w - 1, bc.tee_left);
+}
+
+// Helper: draw a vertical divider down a box
+function drawVDivider(chars, col, y, h, style = 'single') {
+    const bc = BORDER_CHARS[style] || BORDER_CHARS.single;
+    if (col < 0 || (chars.length > 0 && col >= chars[0].length)) return;
+    _safeSet(chars, y, col, bc.tee_down);
+    for (let r = y + 1; r < y + h - 1; r++) _safeSet(chars, r, col, bc.v);
+    _safeSet(chars, y + h - 1, col, bc.tee_up);
+}
+
+// Bresenham's line algorithm — returns array of {x, y} points
+function bresenhamLine(x0, y0, x1, y1) {
+    const points = [];
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let cx = x0, cy = y0;
+
+    while (true) {
+        points.push({ x: cx, y: cy });
+        if (cx === x1 && cy === y1) break;
+        const e2 = 2 * err;
+        if (e2 > -dy) { err -= dy; cx += sx; }
+        if (e2 < dx) { err += dx; cy += sy; }
+    }
+    return points;
+}
+
+// Pick ASCII char for a line segment based on local direction
+function lineCharAt(points, i) {
+    let dx, dy;
+    if (i < points.length - 1) {
+        dx = points[i + 1].x - points[i].x;
+        dy = points[i + 1].y - points[i].y;
+    } else if (i > 0) {
+        dx = points[i].x - points[i - 1].x;
+        dy = points[i].y - points[i - 1].y;
+    } else {
+        return '-';
+    }
+    if (dy === 0) return '-';
+    if (dx === 0) return '|';
+    if ((dx > 0 && dy > 0) || (dx < 0 && dy < 0)) return '\\';
+    return '/';
+}
+
+// Pick arrowhead char based on direction at the endpoint
+function arrowHeadChar(points, atEnd) {
+    let dx, dy;
+    if (atEnd) {
+        const n = points.length;
+        if (n < 2) return '>';
+        dx = points[n - 1].x - points[n - 2].x;
+        dy = points[n - 1].y - points[n - 2].y;
+    } else {
+        if (points.length < 2) return '<';
+        dx = points[0].x - points[1].x;
+        dy = points[0].y - points[1].y;
+    }
+    if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? '>' : '<';
+    if (Math.abs(dy) > Math.abs(dx)) return dy > 0 ? 'v' : '^';
+    // True 45° diagonal — use horizontal arrow
+    return dx > 0 ? '>' : '<';
+}
+
+// === Line Intersection Merging ===
+// Each line character implies directional axes passing through the cell:
+//   H = horizontal, V = vertical, D = forward diagonal (/), B = back diagonal (\)
+// When two line characters occupy the same cell, merge their directions.
+
+const _LINE_DIR_H = 1;
+const _LINE_DIR_V = 2;
+const _LINE_DIR_D = 4;  // /
+const _LINE_DIR_B = 8;  // \
+
+const _LINE_CHAR_DIRS = {
+    // ASCII line chars (from line/arrow components)
+    '-': _LINE_DIR_H, '>': _LINE_DIR_H, '<': _LINE_DIR_H,
+    '|': _LINE_DIR_V, '^': _LINE_DIR_V, 'v': _LINE_DIR_V,
+    '/': _LINE_DIR_D,
+    '\\': _LINE_DIR_B,
+    '+': _LINE_DIR_H | _LINE_DIR_V,
+    'X': _LINE_DIR_D | _LINE_DIR_B,
+    '*': _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B,
+    // Unicode box-drawing (from box/card/table/modal components)
+    '─': _LINE_DIR_H, '━': _LINE_DIR_H, '═': _LINE_DIR_H,
+    '│': _LINE_DIR_V, '┃': _LINE_DIR_V, '║': _LINE_DIR_V,
+    '┼': _LINE_DIR_H | _LINE_DIR_V,
+    '╋': _LINE_DIR_H | _LINE_DIR_V,
+    '╬': _LINE_DIR_H | _LINE_DIR_V,
+};
+
+// Map combined direction flags → result character
+const _DIR_RESULT = {
+    [_LINE_DIR_H]: '-',
+    [_LINE_DIR_V]: '|',
+    [_LINE_DIR_D]: '/',
+    [_LINE_DIR_B]: '\\',
+    [_LINE_DIR_H | _LINE_DIR_V]: '+',
+    [_LINE_DIR_D | _LINE_DIR_B]: 'X',
+    [_LINE_DIR_H | _LINE_DIR_D]: '+',
+    [_LINE_DIR_H | _LINE_DIR_B]: '+',
+    [_LINE_DIR_V | _LINE_DIR_D]: '+',
+    [_LINE_DIR_V | _LINE_DIR_B]: '+',
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D]: '*',
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B]: '*',
+    [_LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B]: '*',
+    [_LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
+};
+
+// Merge two characters that overlap on the grid.
+// If both are line/arrow chars, returns the intersection character.
+// Otherwise returns the incoming char (normal overwrite behavior).
+function mergeLineChars(existing, incoming) {
+    const ed = _LINE_CHAR_DIRS[existing];
+    const id = _LINE_CHAR_DIRS[incoming];
+    // Both must be recognized line chars to merge
+    if (ed === undefined || id === undefined) return incoming;
+    // Same direction — incoming wins (no intersection)
+    if (ed === id) return incoming;
+    const combined = ed | id;
+    return _DIR_RESULT[combined] || incoming;
+}
+
+// Helper: place text into char array, truncating to fit
+function placeText(chars, x, y, text, maxWidth) {
+    if (y < 0 || y >= chars.length) return;
+    const row = chars[y];
+    const len = Math.min(text.length, maxWidth || row.length - x);
+    for (let i = 0; i < len; i++) {
+        const col = x + i;
+        if (col >= 0 && col < row.length) {
+            row[col] = text[i];
+        }
+    }
+}
+
+// --- core/grid.js ---
+// === CharGrid: 2D character buffer with compositing ===
+
+class CharGrid {
+    constructor(cols = GRID_COLS, rows = GRID_ROWS) {
+        this.cols = cols;
+        this.rows = rows;
+        this.cells = this._createEmpty();
+    }
+
+    _createEmpty() {
+        const cells = [];
+        for (let r = 0; r < this.rows; r++) {
+            cells.push(new Array(this.cols).fill(' '));
+        }
+        return cells;
+    }
+
+    clear() {
+        for (let r = 0; r < this.rows; r++) {
+            for (let c = 0; c < this.cols; c++) {
+                this.cells[r][c] = ' ';
+            }
+        }
+    }
+
+    getChar(col, row) {
+        if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+            return this.cells[row][col];
+        }
+        return ' ';
+    }
+
+    setChar(col, row, ch) {
+        if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+            this.cells[row][col] = ch;
+        }
+    }
+
+    // Composite components onto grid (space = transparent)
+    composite(components) {
+        this.clear();
+        // Sort by zIndex ascending (lowest first = drawn first)
+        const sorted = [...components].sort((a, b) => a.zIndex - b.zIndex);
+        for (const comp of sorted) {
+            const rendered = comp.render();
+            if (!rendered) continue;
+            this._blit(rendered, comp.x, comp.y);
+        }
+    }
+
+    // Blit a 2D char array onto the grid (space = transparent, line chars merge)
+    _blit(charArray, offsetX, offsetY) {
+        for (let r = 0; r < charArray.length; r++) {
+            const gridRow = offsetY + r;
+            if (gridRow < 0 || gridRow >= this.rows) continue;
+            const srcRow = charArray[r];
+            for (let c = 0; c < srcRow.length; c++) {
+                const gridCol = offsetX + c;
+                if (gridCol < 0 || gridCol >= this.cols) continue;
+                const incoming = srcRow[c];
+                if (incoming !== ' ') {
+                    const existing = this.cells[gridRow][gridCol];
+                    this.cells[gridRow][gridCol] = (existing !== ' ')
+                        ? mergeLineChars(existing, incoming)
+                        : incoming;
+                }
+            }
+        }
+    }
+
+    // Export as plain text string
+    toText() {
+        return this.cells.map(row => row.join('').trimEnd()).join('\n');
+    }
+
+    // Export as markdown code block
+    toMarkdown() {
+        return '```\n' + this.toText() + '\n```';
+    }
+
+    // Resize the grid
+    resize(newCols, newRows) {
+        const newCells = [];
+        for (let r = 0; r < newRows; r++) {
+            const row = new Array(newCols).fill(' ');
+            if (r < this.rows) {
+                for (let c = 0; c < Math.min(newCols, this.cols); c++) {
+                    row[c] = this.cells[r][c];
+                }
+            }
+            newCells.push(row);
+        }
+        this.cols = newCols;
+        this.rows = newRows;
+        this.cells = newCells;
+    }
+}
+
+// --- core/renderer.js ---
+// === CanvasRenderer: draws CharGrid onto HTML5 Canvas ===
+
+class CanvasRenderer {
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d');
+        this.charWidth = 0;
+        this.charHeight = 0;
+        this.fontSize = DEFAULT_FONT_SIZE;
+        this.fontFamily = DEFAULT_FONT_FAMILY;
+        this._measureFont();
+    }
+
+    _measureFont() {
+        this.ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+        const m = this.ctx.measureText('M');
+        this._fontCharWidth = Math.ceil(m.width);
+        // Square cells: use font size as cell dimension
+        const cellSize = this.fontSize + 2;
+        this.charWidth = cellSize;
+        this.charHeight = cellSize;
+    }
+
+    // Get total pixel dimensions for a grid
+    getGridPixelSize(cols, rows) {
+        return {
+            width: cols * this.charWidth,
+            height: rows * this.charHeight,
+        };
+    }
+
+    // Resize canvas to fit grid
+    resizeToGrid(cols, rows) {
+        const dpr = window.devicePixelRatio || 1;
+        const size = this.getGridPixelSize(cols, rows);
+        this.canvas.width = size.width * dpr;
+        this.canvas.height = size.height * dpr;
+        this.canvas.style.width = size.width + 'px';
+        this.canvas.style.height = size.height + 'px';
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        this._measureFont();
+    }
+
+    // Convert pixel position to grid coordinates
+    pixelToGrid(px, py) {
+        return {
+            col: Math.floor(px / this.charWidth),
+            row: Math.floor(py / this.charHeight),
+        };
+    }
+
+    // Render the full grid
+    render(grid, overlays = {}) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const ch = this.charHeight;
+        const cols = grid.cols;
+        const rows = grid.rows;
+
+        // Background
+        ctx.fillStyle = COLORS.cellBg;
+        ctx.fillRect(0, 0, cols * cw, rows * ch);
+
+        // Grid lines (subtle)
+        ctx.strokeStyle = COLORS.gridLine;
+        ctx.lineWidth = 0.5;
+        for (let c = 0; c <= cols; c++) {
+            ctx.beginPath();
+            ctx.moveTo(c * cw, 0);
+            ctx.lineTo(c * cw, rows * ch);
+            ctx.stroke();
+        }
+        for (let r = 0; r <= rows; r++) {
+            ctx.beginPath();
+            ctx.moveTo(0, r * ch);
+            ctx.lineTo(cols * cw, r * ch);
+            ctx.stroke();
+        }
+
+        // Characters (centered in square cells)
+        ctx.font = `${this.fontSize}px ${this.fontFamily}`;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = COLORS.text;
+        const xPad = Math.floor((cw - this._fontCharWidth) / 2);
+        const yPad = Math.floor((ch - this.fontSize) / 2);
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const ch_ = grid.getChar(c, r);
+                if (ch_ !== ' ') {
+                    ctx.fillText(ch_, c * cw + xPad, r * ch + yPad);
+                }
+            }
+        }
+
+        // Overlays
+        if (overlays.cursor) {
+            this._drawCursor(overlays.cursor.col, overlays.cursor.row);
+        }
+        if (overlays.selection) {
+            this._drawSelection(overlays.selection);
+        }
+        if (overlays.handles) {
+            for (const h of overlays.handles) {
+                this._drawHandle(h.col, h.row);
+            }
+        }
+        if (overlays.selectionRect) {
+            this._drawSelectionRect(overlays.selectionRect);
+        }
+        if (overlays.drawPreview) {
+            this._drawPreviewCells(overlays.drawPreview);
+        }
+        if (overlays.linePreview) {
+            this._drawLinePreview(overlays.linePreview);
+        }
+    }
+
+    _drawCursor(col, row) {
+        const ctx = this.ctx;
+        ctx.strokeStyle = COLORS.cursor;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(
+            col * this.charWidth, row * this.charHeight,
+            this.charWidth, this.charHeight
+        );
+        ctx.setLineDash([]);
+    }
+
+    _drawSelection(rect) {
+        const ctx = this.ctx;
+        const x = rect.x * this.charWidth;
+        const y = rect.y * this.charHeight;
+        const w = rect.w * this.charWidth;
+        const h = rect.h * this.charHeight;
+        ctx.fillStyle = COLORS.selection;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = COLORS.selectionBorder;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+    }
+
+    _drawHandle(col, row) {
+        const ctx = this.ctx;
+        const cx = col * this.charWidth + this.charWidth / 2;
+        const cy = row * this.charHeight + this.charHeight / 2;
+        const r = 3;
+        ctx.fillStyle = COLORS.handleFill;
+        ctx.strokeStyle = COLORS.handle;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+    }
+
+    _drawSelectionRect(rect) {
+        const ctx = this.ctx;
+        const x = rect.x * this.charWidth;
+        const y = rect.y * this.charHeight;
+        const w = rect.w * this.charWidth;
+        const h = rect.h * this.charHeight;
+        ctx.strokeStyle = COLORS.accent;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+    }
+
+    _drawPreviewCells(cells) {
+        const ctx = this.ctx;
+        ctx.fillStyle = 'rgba(166, 227, 161, 0.3)';
+        for (const { col, row } of cells) {
+            ctx.fillRect(
+                col * this.charWidth, row * this.charHeight,
+                this.charWidth, this.charHeight
+            );
+        }
+    }
+
+    _drawLinePreview(p) {
+        const ctx = this.ctx;
+        const x = p.x * this.charWidth;
+        const y = p.y * this.charHeight;
+        const w = p.w * this.charWidth;
+        const h = p.h * this.charHeight;
+        ctx.fillStyle = 'rgba(137, 180, 250, 0.2)';
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = '#89b4fa';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.setLineDash([]);
+    }
+}
+
+// --- core/history.js ---
+// === UndoManager: snapshot-based undo/redo ===
+
+class UndoManager {
+    constructor(maxLevels = MAX_UNDO_LEVELS) {
+        this.maxLevels = maxLevels;
+        this.undoStack = [];
+        this.redoStack = [];
+    }
+
+    // Save a snapshot (deep clone of component array)
+    push(components) {
+        const snapshot = this._serialize(components);
+        this.undoStack.push(snapshot);
+        if (this.undoStack.length > this.maxLevels) {
+            this.undoStack.shift();
+        }
+        // Any new action clears the redo stack
+        this.redoStack = [];
+    }
+
+    // Undo: pop from undo stack, push current state to redo
+    undo(currentComponents) {
+        if (this.undoStack.length === 0) return null;
+        const currentSnapshot = this._serialize(currentComponents);
+        this.redoStack.push(currentSnapshot);
+        const snapshot = this.undoStack.pop();
+        return this._deserialize(snapshot);
+    }
+
+    // Redo: pop from redo stack, push current state to undo
+    redo(currentComponents) {
+        if (this.redoStack.length === 0) return null;
+        const currentSnapshot = this._serialize(currentComponents);
+        this.undoStack.push(currentSnapshot);
+        const snapshot = this.redoStack.pop();
+        return this._deserialize(snapshot);
+    }
+
+    canUndo() { return this.undoStack.length > 0; }
+    canRedo() { return this.redoStack.length > 0; }
+
+    clear() {
+        this.undoStack = [];
+        this.redoStack = [];
+    }
+
+    _serialize(components) {
+        return JSON.stringify(components.map(c => c.serialize()));
+    }
+
+    _deserialize(snapshot) {
+        const data = JSON.parse(snapshot);
+        return data.map(d => ComponentRegistry.deserialize(d));
+    }
+}
+
+// --- core/export.js ---
+// === Export utilities ===
+
+const ExportUtils = {
+    // Copy text to clipboard
+    async copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch {
+            // Fallback for older browsers
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return ok;
+        }
+    },
+
+    // Save project to a JSON file
+    saveToFile(components, filename = 'wireframe.kaomoji.json') {
+        const data = {
+            version: 1,
+            gridCols: GRID_COLS,
+            gridRows: GRID_ROWS,
+            components: components.map(c => c.serialize()),
+            timestamp: new Date().toISOString(),
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    },
+
+    // Load project from a JSON file (returns Promise<Component[]>)
+    loadFromFile() {
+        return new Promise((resolve, reject) => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) { reject(new Error('No file selected')); return; }
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const data = JSON.parse(ev.target.result);
+                        if (data.version !== 1) {
+                            reject(new Error('Unsupported file version'));
+                            return;
+                        }
+                        const components = data.components.map(d => ComponentRegistry.deserialize(d));
+                        resolve(components);
+                    } catch (err) {
+                        reject(err);
+                    }
+                };
+                reader.onerror = () => reject(reader.error);
+                reader.readAsText(file);
+            };
+            input.click();
+        });
+    },
+
+    // Save to localStorage
+    saveToLocalStorage(components, key = 'kaomoji_project') {
+        const data = {
+            version: 1,
+            gridCols: GRID_COLS,
+            gridRows: GRID_ROWS,
+            components: components.map(c => c.serialize()),
+            timestamp: new Date().toISOString(),
+        };
+        localStorage.setItem(key, JSON.stringify(data));
+    },
+
+    // Load from localStorage
+    loadFromLocalStorage(key = 'kaomoji_project') {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        try {
+            const data = JSON.parse(raw);
+            if (data.version !== 1) return null;
+            return data.components.map(d => ComponentRegistry.deserialize(d));
+        } catch {
+            return null;
+        }
+    },
+
+    // Export as plain text (trimmed)
+    exportAsText(grid) {
+        const lines = grid.toText().split('\n');
+        // Trim trailing empty lines
+        while (lines.length > 0 && lines[lines.length - 1].trim() === '') {
+            lines.pop();
+        }
+        return lines.join('\n');
+    },
+
+    // Export as markdown code block
+    exportAsMarkdown(grid) {
+        return '```\n' + this.exportAsText(grid) + '\n```';
+    },
+};
+
+// --- components/base.js ---
+// === BaseComponent: abstract class for all components ===
+
+let _componentIdCounter = 0;
+
+class BaseComponent {
+    constructor(type, x, y, w, h, props = {}) {
+        this.id = ++_componentIdCounter;
+        this.type = type;
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.zIndex = 0;
+        this.visible = true;
+        this.locked = false;
+        this.name = props.name || `${type}_${this.id}`;
+        this.borderStyle = props.borderStyle || 'single';
+        this.props = { ...props };
+        delete this.props.name;
+        delete this.props.borderStyle;
+    }
+
+    // Render to a 2D char array (w × h). Override in subclass.
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        return chars;
+    }
+
+    // Hit test: does (col, row) land on this component?
+    contains(col, row) {
+        return col >= this.x && col < this.x + this.w &&
+               row >= this.y && row < this.y + this.h;
+    }
+
+    // Get bounding box
+    getBounds() {
+        return { x: this.x, y: this.y, w: this.w, h: this.h };
+    }
+
+    // Get resize handles (8 points around bounding box)
+    getHandles() {
+        const { x, y, w, h } = this;
+        return [
+            { col: x,         row: y,         dir: 'nw' },
+            { col: x + Math.floor(w/2), row: y, dir: 'n' },
+            { col: x + w - 1, row: y,         dir: 'ne' },
+            { col: x + w - 1, row: y + Math.floor(h/2), dir: 'e' },
+            { col: x + w - 1, row: y + h - 1, dir: 'se' },
+            { col: x + Math.floor(w/2), row: y + h - 1, dir: 's' },
+            { col: x,         row: y + h - 1, dir: 'sw' },
+            { col: x,         row: y + Math.floor(h/2), dir: 'w' },
+        ];
+    }
+
+    // Check if a point is near a resize handle (returns handle dir or null)
+    getHandleAt(col, row) {
+        for (const h of this.getHandles()) {
+            if (h.col === col && h.row === row) return h.dir;
+        }
+        return null;
+    }
+
+    // Minimum size (override in subclass)
+    getMinSize() {
+        return { minW: 1, minH: 1 };
+    }
+
+    // Serialize for undo/save
+    serialize() {
+        return {
+            type: this.type,
+            id: this.id,
+            x: this.x,
+            y: this.y,
+            w: this.w,
+            h: this.h,
+            zIndex: this.zIndex,
+            visible: this.visible,
+            locked: this.locked,
+            name: this.name,
+            borderStyle: this.borderStyle,
+            props: { ...this.props },
+        };
+    }
+
+    // Restore from serialized data
+    static fromData(data) {
+        // Override in subclasses via registry
+        throw new Error('Use ComponentRegistry.deserialize()');
+    }
+
+    // Apply serialized data to this instance
+    applyData(data) {
+        this.id = data.id;
+        this.x = data.x;
+        this.y = data.y;
+        this.w = data.w;
+        this.h = data.h;
+        this.zIndex = data.zIndex;
+        this.visible = data.visible !== undefined ? data.visible : true;
+        this.locked = data.locked || false;
+        this.name = data.name;
+        this.borderStyle = data.borderStyle || 'single';
+        this.props = { ...data.props };
+        // Keep global counter in sync
+        if (data.id >= _componentIdCounter) {
+            _componentIdCounter = data.id;
+        }
+    }
+
+    // Clone this component
+    clone() {
+        const data = this.serialize();
+        data.id = ++_componentIdCounter;
+        data.name = `${this.type}_${data.id}`;
+        data.x += 2;
+        data.y += 1;
+        return ComponentRegistry.deserialize(data);
+    }
+
+    // Get editable properties (for inspector panel). Override in subclass.
+    getEditableProps() {
+        return [
+            { key: 'x', label: 'X', type: 'number' },
+            { key: 'y', label: 'Y', type: 'number' },
+            { key: 'w', label: 'W', type: 'number' },
+            { key: 'h', label: 'H', type: 'number' },
+            { key: 'borderStyle', label: 'Border', type: 'select', options: BORDER_STYLES },
+        ];
+    }
+
+    // Set a property value (handles both direct and props-based)
+    setProp(key, value) {
+        if (key in this && typeof this[key] !== 'function') {
+            if (typeof this[key] === 'number') value = parseInt(value, 10) || 0;
+            this[key] = value;
+        } else {
+            this.props[key] = value;
+        }
+    }
+
+    // Get a property value
+    getProp(key) {
+        if (key in this && typeof this[key] !== 'function') return this[key];
+        return this.props[key];
+    }
+}
+
+// --- components/textbox.js ---
+// === TextBox Component ===
+class TextBoxComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('textbox', x, y, w, h, props);
+        this.props.text = props.text || 'Text';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const lines = this.props.text.split('\n');
+        for (let r = 0; r < Math.min(lines.length, this.h); r++) {
+            placeText(chars, 0, r, lines[r], this.w);
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 1, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'text', label: 'Text', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/box.js ---
+// === Box Component: simple rectangle with border ===
+class BoxComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('box', x, y, w, h, props);
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        if (this.w >= 2 && this.h >= 2) {
+            drawBox(chars, 0, 0, this.w, this.h, this.borderStyle);
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 3, minH: 3 }; }
+}
+
+// --- components/button.js ---
+// === Button Component: [ Label ] ===
+class ButtonComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('button', x, y, w || 10, h || 1, props);
+        this.props.label = props.label || 'Button';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const label = this.props.label;
+        const inner = label.substring(0, this.w - 4);
+        const text = `[ ${inner} ]`;
+        placeText(chars, 0, 0, text, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'label', label: 'Label', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/input.js ---
+// === Input Component: [___________] ===
+class InputComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('input', x, y, w || 16, h || 1, props);
+        this.props.placeholder = props.placeholder || '';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        chars[0][0] = '[';
+        chars[0][this.w - 1] = ']';
+        const placeholder = this.props.placeholder;
+        if (placeholder) {
+            placeText(chars, 1, 0, placeholder, this.w - 2);
+        } else {
+            for (let c = 1; c < this.w - 1; c++) {
+                chars[0][c] = '_';
+            }
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'placeholder', label: 'Placeholder', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/line.js ---
+// === Line Component: any-angle line using Bresenham ===
+class LineComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('line', x, y, w || 8, h || 1, props);
+        // flipped: false = TL→BR diagonal, true = TR→BL diagonal
+        if (props.flipped !== undefined) {
+            this.props.flipped = props.flipped;
+        } else if (props.orientation === 'vertical') {
+            // Backward compat: vertical line
+            this.props.flipped = false;
+        } else {
+            this.props.flipped = false;
+        }
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+
+        // Determine endpoints within bounding box
+        let x0, y0, x1, y1;
+        if (this.props.flipped) {
+            x0 = this.w - 1; y0 = 0;
+            x1 = 0; y1 = this.h - 1;
+        } else {
+            x0 = 0; y0 = 0;
+            x1 = this.w - 1; y1 = this.h - 1;
+        }
+
+        const points = bresenhamLine(x0, y0, x1, y1);
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            if (p.y >= 0 && p.y < this.h && p.x >= 0 && p.x < this.w) {
+                chars[p.y][p.x] = lineCharAt(points, i);
+            }
+        }
+
+        return chars;
+    }
+
+    getMinSize() { return { minW: 1, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'flipped', label: 'Flip', type: 'select', options: ['false', 'true'], propsBased: true },
+        ];
+    }
+}
+
+// --- components/arrow.js ---
+// === Arrow Component: any-angle line with arrowhead ===
+class ArrowComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('arrow', x, y, w || 8, h || 1, props);
+        // flipped: false = TL→BR, true = TR→BL
+        if (props.flipped !== undefined) {
+            this.props.flipped = props.flipped;
+        } else if (props.orientation === 'vertical') {
+            this.props.flipped = false;
+        } else {
+            this.props.flipped = false;
+        }
+        // reversed: false = arrowhead at end of Bresenham, true = at start
+        if (props.reversed !== undefined) {
+            this.props.reversed = props.reversed;
+        } else if (props.direction === 'left' || props.direction === 'up') {
+            this.props.reversed = true;
+        } else {
+            this.props.reversed = false;
+        }
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+
+        let x0, y0, x1, y1;
+        if (this.props.flipped) {
+            x0 = this.w - 1; y0 = 0;
+            x1 = 0; y1 = this.h - 1;
+        } else {
+            x0 = 0; y0 = 0;
+            x1 = this.w - 1; y1 = this.h - 1;
+        }
+
+        const points = bresenhamLine(x0, y0, x1, y1);
+        for (let i = 0; i < points.length; i++) {
+            const p = points[i];
+            if (p.y >= 0 && p.y < this.h && p.x >= 0 && p.x < this.w) {
+                chars[p.y][p.x] = lineCharAt(points, i);
+            }
+        }
+
+        // Place arrowhead
+        if (points.length >= 2) {
+            const reversed = this.props.reversed;
+            const headIdx = reversed ? 0 : points.length - 1;
+            const hp = points[headIdx];
+            if (hp.y >= 0 && hp.y < this.h && hp.x >= 0 && hp.x < this.w) {
+                chars[hp.y][hp.x] = arrowHeadChar(points, !reversed);
+            }
+        }
+
+        return chars;
+    }
+
+    getMinSize() { return { minW: 2, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'flipped', label: 'Flip', type: 'select', options: ['false', 'true'], propsBased: true },
+            { key: 'reversed', label: 'Reverse', type: 'select', options: ['false', 'true'], propsBased: true },
+        ];
+    }
+}
+
+// --- components/card.js ---
+// === Card Component: Box with header divider ===
+class CardComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('card', x, y, w || 20, h || 8, props);
+        this.props.title = props.title || 'Card Title';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        if (this.w >= 3 && this.h >= 4) {
+            drawBox(chars, 0, 0, this.w, this.h, this.borderStyle);
+            // Title
+            placeText(chars, 2, 1, this.props.title, this.w - 4);
+            // Divider at row 2
+            drawHDivider(chars, 0, this.w, 2, this.borderStyle);
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 4 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'title', label: 'Title', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/table.js ---
+// === Table Component: multi-column grid ===
+class TableComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('table', x, y, w || 24, h || 7, props);
+        this.props.cols = props.cols || 3;
+        this.props.rows = props.rows || 3;
+        this.props.headers = props.headers || ['Col1', 'Col2', 'Col3'];
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        if (this.w < 5 || this.h < 4) return chars;
+
+        const bc = BORDER_CHARS[this.borderStyle] || BORDER_CHARS.single;
+        // Clamp cols so each column is at least 3 chars wide (border + 1 char + border)
+        const maxCols = Math.max(1, Math.floor((this.w - 1) / 3));
+        const numCols = Math.min(Math.max(1, this.props.cols), maxCols);
+        const colWidth = Math.floor((this.w - 1) / numCols);
+        const numRows = Math.max(1, this.props.rows);
+        const rowHeight = 2; // each data row = 1 content line + 1 divider line
+
+        // Draw outer box
+        drawBox(chars, 0, 0, this.w, this.h, this.borderStyle);
+
+        // Vertical dividers (full height)
+        for (let c = 1; c < numCols; c++) {
+            const cx = c * colWidth;
+            if (cx > 0 && cx < this.w - 1) {
+                drawVDivider(chars, cx, 0, this.h, this.borderStyle);
+            }
+        }
+
+        // Header row divider at row 2
+        if (this.h > 2) {
+            drawHDivider(chars, 0, this.w, 2, this.borderStyle);
+            // Fix intersections at header divider
+            for (let c = 1; c < numCols; c++) {
+                const cx = c * colWidth;
+                if (cx > 0 && cx < this.w - 1) {
+                    chars[2][cx] = bc.cross;
+                }
+            }
+        }
+
+        // Data row dividers
+        for (let r = 1; r < numRows; r++) {
+            const ry = 2 + r * rowHeight; // header takes rows 0-2, then each data row is 2 high
+            if (ry > 0 && ry < this.h - 1) {
+                drawHDivider(chars, 0, this.w, ry, this.borderStyle);
+                // Fix intersections with vertical dividers
+                for (let c = 1; c < numCols; c++) {
+                    const cx = c * colWidth;
+                    if (cx > 0 && cx < this.w - 1) {
+                        chars[ry][cx] = bc.cross;
+                    }
+                }
+            }
+        }
+
+        // Fix top-row intersections (tee_down where vertical meets top border)
+        for (let c = 1; c < numCols; c++) {
+            const cx = c * colWidth;
+            if (cx > 0 && cx < this.w - 1) {
+                chars[0][cx] = bc.tee_down;
+            }
+        }
+        // Fix bottom-row intersections (tee_up where vertical meets bottom border)
+        for (let c = 1; c < numCols; c++) {
+            const cx = c * colWidth;
+            if (cx > 0 && cx < this.w - 1) {
+                chars[this.h - 1][cx] = bc.tee_up;
+            }
+        }
+
+        // Header text
+        const headers = this.props.headers || [];
+        for (let c = 0; c < numCols; c++) {
+            const cx = c * colWidth + 1;
+            const header = headers[c] || `Col${c+1}`;
+            placeText(chars, cx, 1, header, colWidth - 1);
+        }
+
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 4 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'cols', label: 'Cols', type: 'number', propsBased: true },
+            { key: 'rows', label: 'Rows', type: 'number', propsBased: true },
+        ];
+    }
+}
+
+// --- components/modal.js ---
+// === Modal Component: Card + close button + action row ===
+class ModalComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('modal', x, y, w || 30, h || 12, props);
+        this.props.title = props.title || 'Modal Title';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        if (this.w < 10 || this.h < 6) return chars;
+
+        drawBox(chars, 0, 0, this.w, this.h, this.borderStyle);
+        // Title + close button
+        placeText(chars, 2, 1, this.props.title, this.w - 6);
+        chars[1][this.w - 3] = '×';
+        // Header divider
+        drawHDivider(chars, 0, this.w, 2, this.borderStyle);
+        // Action row divider (2 rows from bottom)
+        const actionRow = this.h - 3;
+        if (actionRow > 2) {
+            drawHDivider(chars, 0, this.w, actionRow, this.borderStyle);
+            // Action buttons — only render if enough width
+            const cancelBtn = '[ Cancel ]';
+            const okBtn = '[  OK  ]';
+            const actionsY = actionRow + 1;
+            const btnTotalWidth = cancelBtn.length + okBtn.length + 4;
+            if (this.w >= btnTotalWidth) {
+                placeText(chars, this.w - btnTotalWidth, actionsY, cancelBtn, cancelBtn.length);
+                placeText(chars, this.w - okBtn.length - 2, actionsY, okBtn, okBtn.length);
+            } else {
+                // Narrow modal: just show OK button if it fits
+                if (this.w >= okBtn.length + 3) {
+                    placeText(chars, this.w - okBtn.length - 2, actionsY, okBtn, okBtn.length);
+                }
+            }
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 10, minH: 6 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'title', label: 'Title', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/tabs.js ---
+// === Tabs Component: [Active] Tab2 Tab3 + underline ===
+class TabsComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('tabs', x, y, w || 30, h || 2, props);
+        this.props.tabs = props.tabs || ['Tab 1', 'Tab 2', 'Tab 3'];
+        this.props.activeIndex = props.activeIndex || 0;
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const tabs = this.props.tabs;
+        const active = this.props.activeIndex;
+        let col = 0;
+        for (let i = 0; i < tabs.length && col < this.w; i++) {
+            const label = tabs[i];
+            if (i === active) {
+                const text = `[${label}]`;
+                placeText(chars, col, 0, text, this.w - col);
+                col += text.length + 1;
+            } else {
+                placeText(chars, col, 0, label, this.w - col);
+                col += label.length + 1;
+            }
+        }
+        // Underline
+        if (this.h >= 2) {
+            const bc = BORDER_CHARS[this.borderStyle] || BORDER_CHARS.single;
+            for (let c = 0; c < this.w; c++) {
+                chars[1][c] = bc.h;
+            }
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 8, minH: 2 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'activeIndex', label: 'Active', type: 'number', propsBased: true },
+        ];
+    }
+}
+
+// --- components/navbar.js ---
+// === NavBar Component: Logo Link Link [Action] ===
+class NavBarComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('navbar', x, y, w || 40, h || 1, props);
+        this.props.logo = props.logo || 'Logo';
+        this.props.links = props.links || ['Home', 'About', 'Contact'];
+        this.props.action = props.action || 'Sign In';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        let col = 0;
+        // Logo
+        placeText(chars, col, 0, this.props.logo, this.w);
+        col += this.props.logo.length + 2;
+        // Links
+        for (const link of this.props.links) {
+            if (col >= this.w) break;
+            placeText(chars, col, 0, link, this.w - col);
+            col += link.length + 2;
+        }
+        // Action button aligned right
+        const actionText = `[${this.props.action}]`;
+        const actionStart = this.w - actionText.length;
+        if (actionStart > col) {
+            placeText(chars, actionStart, 0, actionText, actionText.length);
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 10, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'logo', label: 'Logo', type: 'text', propsBased: true },
+            { key: 'action', label: 'Action', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/dropdown.js ---
+// === Dropdown Component: [Option ▾] ===
+class DropdownComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('dropdown', x, y, w || 14, h || 1, props);
+        this.props.value = props.value || 'Option';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        chars[0][0] = '[';
+        chars[0][this.w - 1] = ']';
+        // Value text
+        const val = this.props.value;
+        placeText(chars, 1, 0, val, this.w - 4);
+        // Down arrow
+        chars[0][this.w - 2] = '▾';
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'value', label: 'Value', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/search.js ---
+// === Search Component: [🔍 Search...    ] ===
+class SearchComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('search', x, y, w || 20, h || 1, props);
+        this.props.placeholder = props.placeholder || 'Search...';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        chars[0][0] = '[';
+        chars[0][this.w - 1] = ']';
+        const text = '/ ' + this.props.placeholder;
+        placeText(chars, 1, 0, text, this.w - 2);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 8, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'placeholder', label: 'Placeholder', type: 'text', propsBased: true },
+        ];
+    }
+}
+
+// --- components/checkbox.js ---
+// === Checkbox Component: [x] Label ===
+class CheckboxComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('checkbox', x, y, w || 12, h || 1, props);
+        this.props.label = props.label || 'Option';
+        this.props.checked = props.checked !== undefined ? props.checked : true;
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const mark = this.props.checked ? 'x' : ' ';
+        const text = `[${mark}] ${this.props.label}`;
+        placeText(chars, 0, 0, text, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 4, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'label', label: 'Label', type: 'text', propsBased: true },
+            { key: 'checked', label: 'Checked', type: 'select', options: ['true', 'false'], propsBased: true },
+        ];
+    }
+}
+
+// --- components/radio.js ---
+// === Radio Component: (o) Label ===
+class RadioComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('radio', x, y, w || 12, h || 1, props);
+        this.props.label = props.label || 'Option';
+        this.props.selected = props.selected !== undefined ? props.selected : true;
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const mark = this.props.selected ? 'o' : ' ';
+        const text = `(${mark}) ${this.props.label}`;
+        placeText(chars, 0, 0, text, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 4, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'label', label: 'Label', type: 'text', propsBased: true },
+            { key: 'selected', label: 'Selected', type: 'select', options: ['true', 'false'], propsBased: true },
+        ];
+    }
+}
+
+// --- components/toggle.js ---
+// === Toggle Component: [━●] On / [●━] Off ===
+class ToggleComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('toggle', x, y, w || 8, h || 1, props);
+        this.props.on = props.on !== undefined ? props.on : true;
+        this.props.label = props.label || '';
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const toggle = this.props.on ? '[━●]' : '[●━]';
+        const stateLabel = this.props.on ? ' On' : ' Off';
+        const label = this.props.label ? ` ${this.props.label}` : '';
+        placeText(chars, 0, 0, toggle + stateLabel + label, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'label', label: 'Label', type: 'text', propsBased: true },
+            { key: 'on', label: 'State', type: 'select', options: ['true', 'false'], propsBased: true },
+        ];
+    }
+}
+
+// --- components/progress.js ---
+// === Progress Component: [████░░] 50% ===
+class ProgressComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('progress', x, y, w || 16, h || 1, props);
+        this.props.value = props.value !== undefined ? props.value : 50;
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const pct = Math.max(0, Math.min(100, this.props.value));
+        const label = ` ${pct}%`;
+        const barW = this.w - label.length - 2; // account for [ ] and label
+        if (barW < 1) return chars;
+
+        const filled = Math.round(barW * pct / 100);
+        let bar = '[';
+        for (let i = 0; i < barW; i++) {
+            bar += i < filled ? '█' : '░';
+        }
+        bar += ']' + label;
+        placeText(chars, 0, 0, bar, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 8, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'value', label: 'Value %', type: 'number', propsBased: true },
+        ];
+    }
+}
+
+// --- components/breadcrumb.js ---
+// === Breadcrumb Component: Home > Docs > About ===
+class BreadcrumbComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('breadcrumb', x, y, w || 24, h || 1, props);
+        this.props.items = props.items || ['Home', 'Docs', 'About'];
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const text = this.props.items.join(' > ');
+        placeText(chars, 0, 0, text, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 5, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+        ];
+    }
+}
+
+// --- components/pagination.js ---
+// === Pagination Component: < 1 [2] 3 > ===
+class PaginationComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('pagination', x, y, w || 16, h || 1, props);
+        this.props.pages = props.pages || 5;
+        this.props.current = props.current || 1;
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const total = Math.max(1, this.props.pages);
+        const current = Math.max(1, Math.min(total, this.props.current));
+        let text = '< ';
+        for (let i = 1; i <= total; i++) {
+            if (i === current) {
+                text += `[${i}] `;
+            } else {
+                text += `${i} `;
+            }
+        }
+        text += '>';
+        placeText(chars, 0, 0, text, this.w);
+        return chars;
+    }
+
+    getMinSize() { return { minW: 7, minH: 1 }; }
+
+    getEditableProps() {
+        return [
+            ...super.getEditableProps(),
+            { key: 'pages', label: 'Pages', type: 'number', propsBased: true },
+            { key: 'current', label: 'Current', type: 'number', propsBased: true },
+        ];
+    }
+}
+
+// --- components/separator.js ---
+// === Separator Component: ──────── ===
+class SeparatorComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('separator', x, y, w || 20, h || 1, props);
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+        const bc = BORDER_CHARS[this.borderStyle] || BORDER_CHARS.single;
+        for (let c = 0; c < this.w; c++) {
+            chars[0][c] = bc.h;
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 2, minH: 1 }; }
+}
+
+// --- components/circle.js ---
+class CircleComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('circle', x, y, w || 12, h || 7, props);
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+
+        const w = this.w;
+        const h = this.h;
+
+        if (w < 3 || h < 3) return chars;
+
+        const cx = (w - 1) / 2;
+        const cy = (h - 1) / 2;
+        const rx = (w - 1) / 2;
+        const ry = (h - 1) / 2;
+
+        for (let r = 0; r < h; r++) {
+            const yNorm = (r - cy) / ry;
+            if (Math.abs(yNorm) > 1) continue;
+
+            const xSpan = rx * Math.sqrt(1 - yNorm * yNorm);
+            const left = Math.round(cx - xSpan);
+            const right = Math.round(cx + xSpan);
+
+            if (r === 0 || r === h - 1) {
+                // Top and bottom: use '-'
+                for (let c = left; c <= right; c++) {
+                    _safeSet(chars, r, c, '-');
+                }
+            } else {
+                // Determine character based on slope
+                const yAbove = (r - 0.5 - cy) / ry;
+                const yBelow = (r + 0.5 - cy) / ry;
+                const xAbove = Math.abs(yAbove) <= 1 ? rx * Math.sqrt(1 - yAbove * yAbove) : 0;
+                const xBelow = Math.abs(yBelow) <= 1 ? rx * Math.sqrt(1 - yBelow * yBelow) : 0;
+
+                const slope = xAbove - xBelow;
+
+                let leftChar, rightChar;
+                if (Math.abs(slope) < 0.3) {
+                    leftChar = '|';
+                    rightChar = '|';
+                } else if (r < cy) {
+                    leftChar = '/';
+                    rightChar = '\\';
+                } else {
+                    leftChar = '\\';
+                    rightChar = '/';
+                }
+
+                _safeSet(chars, r, left, leftChar);
+                _safeSet(chars, r, right, rightChar);
+            }
+        }
+
+        return chars;
+    }
+
+    getMinSize() {
+        return { minW: 5, minH: 3 };
+    }
+
+    getEditableProps() {
+        return super.getEditableProps();
+    }
+}
+
+// --- components/registry.js ---
+// === Component Registry: factory + deserialization ===
+
+const ComponentRegistry = {
+    _types: {},
+
+    register(type, cls, defaults) {
+        this._types[type] = { cls, defaults };
+    },
+
+    create(type, x, y, props = {}) {
+        const entry = this._types[type];
+        if (!entry) throw new Error(`Unknown component type: ${type}`);
+        const d = entry.defaults;
+        return new entry.cls(x, y, d.w, d.h, { ...d.props, ...props });
+    },
+
+    deserialize(data) {
+        const entry = this._types[data.type];
+        if (!entry) throw new Error(`Unknown component type: ${data.type}`);
+        const comp = new entry.cls(data.x, data.y, data.w, data.h, {
+            borderStyle: data.borderStyle,
+            name: data.name,
+            ...data.props,
+        });
+        comp.applyData(data);
+        return comp;
+    },
+
+    getTypes() {
+        return Object.keys(this._types);
+    },
+
+    getDefaults(type) {
+        const entry = this._types[type];
+        return entry ? entry.defaults : null;
+    },
+};
+
+// Register all component types with default dimensions
+ComponentRegistry.register('textbox', TextBoxComponent, { w: 10, h: 1, props: { text: 'Text' } });
+ComponentRegistry.register('box', BoxComponent, { w: 12, h: 6, props: {} });
+ComponentRegistry.register('button', ButtonComponent, { w: 10, h: 1, props: { label: 'Button' } });
+ComponentRegistry.register('input', InputComponent, { w: 16, h: 1, props: { placeholder: '' } });
+ComponentRegistry.register('line', LineComponent, { w: 8, h: 1, props: { orientation: 'horizontal' } });
+ComponentRegistry.register('arrow', ArrowComponent, { w: 8, h: 1, props: { orientation: 'horizontal', direction: 'right' } });
+ComponentRegistry.register('card', CardComponent, { w: 20, h: 8, props: { title: 'Card Title' } });
+ComponentRegistry.register('table', TableComponent, { w: 24, h: 7, props: { cols: 3, rows: 3, headers: ['Col1', 'Col2', 'Col3'] } });
+ComponentRegistry.register('modal', ModalComponent, { w: 30, h: 12, props: { title: 'Modal Title' } });
+ComponentRegistry.register('tabs', TabsComponent, { w: 30, h: 2, props: { tabs: ['Tab 1', 'Tab 2', 'Tab 3'], activeIndex: 0 } });
+ComponentRegistry.register('navbar', NavBarComponent, { w: 40, h: 1, props: { logo: 'Logo', links: ['Home', 'About', 'Contact'], action: 'Sign In' } });
+ComponentRegistry.register('dropdown', DropdownComponent, { w: 14, h: 1, props: { value: 'Option' } });
+ComponentRegistry.register('search', SearchComponent, { w: 20, h: 1, props: { placeholder: 'Search...' } });
+ComponentRegistry.register('checkbox', CheckboxComponent, { w: 12, h: 1, props: { label: 'Option', checked: true } });
+ComponentRegistry.register('radio', RadioComponent, { w: 12, h: 1, props: { label: 'Option', selected: true } });
+ComponentRegistry.register('toggle', ToggleComponent, { w: 8, h: 1, props: { on: true, label: '' } });
+ComponentRegistry.register('progress', ProgressComponent, { w: 16, h: 1, props: { value: 50 } });
+ComponentRegistry.register('breadcrumb', BreadcrumbComponent, { w: 24, h: 1, props: { items: ['Home', 'Docs', 'About'] } });
+ComponentRegistry.register('pagination', PaginationComponent, { w: 16, h: 1, props: { pages: 5, current: 1 } });
+ComponentRegistry.register('separator', SeparatorComponent, { w: 20, h: 1, props: {} });
+ComponentRegistry.register('circle', CircleComponent, { w: 12, h: 7, props: {} });
+
+// Element palette definitions (for UI)
+const ELEMENT_PALETTE = [
+    { type: 'button', label: 'Button', preview: '[ OK ]' },
+    { type: 'input', label: 'Input', preview: '[______]' },
+    { type: 'box', label: 'Box', preview: '┌───┐' },
+    { type: 'table', label: 'Table', preview: '┌┬┬┐' },
+    { type: 'dropdown', label: 'Dropdown', preview: '[Opt ▾]' },
+    { type: 'search', label: 'Search', preview: '🔍 ...' },
+    { type: 'checkbox', label: 'Checkbox', preview: '☑ Opt' },
+    { type: 'radio', label: 'Radio', preview: '◉ Opt' },
+    { type: 'toggle', label: 'Toggle', preview: '━━●' },
+    { type: 'progress', label: 'Progress', preview: '▓▓▓░░' },
+    { type: 'breadcrumb', label: 'Breadcrumb', preview: 'a › b' },
+    { type: 'pagination', label: 'Pages', preview: '‹ 1 2 ›' },
+    { type: 'circle', label: 'Circle', preview: '(  )' },
+];
+
+// --- tools/base.js ---
+// === BaseTool: interface for all tools ===
+
+class BaseTool {
+    constructor(name, app) {
+        this.name = name;
+        this.app = app;
+    }
+
+    // Called when tool is activated
+    activate() {}
+
+    // Called when tool is deactivated
+    deactivate() {}
+
+    // Mouse event handlers (col/row are grid coordinates)
+    onMouseDown(col, row, e) {}
+    onMouseMove(col, row, e) {}
+    onMouseUp(col, row, e) {}
+
+    // Called each frame to provide overlay data
+    getOverlays() { return {}; }
+
+    // Get cursor style
+    getCursor() { return 'crosshair'; }
+}
+
+// --- tools/select.js ---
+// === Select Tool: click to select, drag to move, handles to resize ===
+
+class SelectTool extends BaseTool {
+    constructor(app) {
+        super('select', app);
+        this._dragging = false;
+        this._resizing = false;
+        this._resizeDir = null;
+        this._startCol = 0;
+        this._startRow = 0;
+        this._origX = 0;
+        this._origY = 0;
+        this._origW = 0;
+        this._origH = 0;
+        this._marquee = null;
+    }
+
+    activate() {
+        this._dragging = false;
+        this._resizing = false;
+        this._marquee = null;
+    }
+
+    deactivate() {
+        this._dragging = false;
+        this._resizing = false;
+        this._marquee = null;
+    }
+
+    onMouseDown(col, row, e) {
+        const app = this.app;
+        const selected = app.selectedComponent;
+
+        // Check resize handles first
+        if (selected && !selected.locked) {
+            const handleDir = selected.getHandleAt(col, row);
+            if (handleDir) {
+                this._resizing = true;
+                this._resizeDir = handleDir;
+                this._startCol = col;
+                this._startRow = row;
+                this._origX = selected.x;
+                this._origY = selected.y;
+                this._origW = selected.w;
+                this._origH = selected.h;
+                app.pushUndo();
+                return;
+            }
+        }
+
+        // Hit test: find topmost component under cursor
+        const hit = app.hitTest(col, row);
+        if (hit) {
+            app.selectComponent(hit);
+            if (!hit.locked) {
+                this._dragging = true;
+                this._startCol = col;
+                this._startRow = row;
+                this._origX = hit.x;
+                this._origY = hit.y;
+                app.pushUndo();
+            }
+        } else {
+            // Start marquee selection
+            app.selectComponent(null);
+            this._marquee = { x1: col, y1: row, x2: col, y2: row };
+        }
+    }
+
+    onMouseMove(col, row, e) {
+        const app = this.app;
+        const selected = app.selectedComponent;
+
+        if (this._resizing && selected) {
+            const dx = col - this._startCol;
+            const dy = row - this._startRow;
+            const min = selected.getMinSize();
+            this._applyResize(selected, dx, dy, min);
+            app.render();
+            return;
+        }
+
+        if (this._dragging && selected) {
+            const dx = col - this._startCol;
+            const dy = row - this._startRow;
+            selected.x = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
+            selected.y = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
+            app.render();
+            return;
+        }
+
+        if (this._marquee) {
+            this._marquee.x2 = col;
+            this._marquee.y2 = row;
+            app.render();
+        }
+    }
+
+    onMouseUp(col, row, e) {
+        if (this._marquee) {
+            // Select all components within marquee rectangle
+            const mx = Math.min(this._marquee.x1, this._marquee.x2);
+            const my = Math.min(this._marquee.y1, this._marquee.y2);
+            const mw = Math.abs(this._marquee.x2 - this._marquee.x1);
+            const mh = Math.abs(this._marquee.y2 - this._marquee.y1);
+            if (mw > 1 || mh > 1) {
+                // Find first component within
+                const hit = this.app.components.slice().reverse().find(c =>
+                    c.visible && c.x >= mx && c.y >= my &&
+                    c.x + c.w <= mx + mw + 1 && c.y + c.h <= my + mh + 1
+                );
+                if (hit) this.app.selectComponent(hit);
+            }
+            this._marquee = null;
+        }
+        this._dragging = false;
+        this._resizing = false;
+        this._resizeDir = null;
+        this.app.render();
+    }
+
+    _applyResize(comp, dx, dy, min) {
+        const dir = this._resizeDir;
+        let x = this._origX, y = this._origY, w = this._origW, h = this._origH;
+
+        if (dir.includes('e')) { w = Math.max(min.minW, this._origW + dx); }
+        if (dir.includes('w')) { w = Math.max(min.minW, this._origW - dx); x = this._origX + this._origW - w; }
+        if (dir.includes('s')) { h = Math.max(min.minH, this._origH + dy); }
+        if (dir.includes('n')) { h = Math.max(min.minH, this._origH - dy); y = this._origY + this._origH - h; }
+
+        // Clamp to grid
+        x = Math.max(0, x);
+        y = Math.max(0, y);
+        if (x + w > GRID_COLS) w = GRID_COLS - x;
+        if (y + h > GRID_ROWS) h = GRID_ROWS - y;
+
+        comp.x = x;
+        comp.y = y;
+        comp.w = w;
+        comp.h = h;
+    }
+
+    getOverlays() {
+        const overlays = {};
+        const selected = this.app.selectedComponent;
+        if (selected) {
+            overlays.selection = selected.getBounds();
+            if (!selected.locked) {
+                overlays.handles = selected.getHandles();
+            }
+        }
+        if (this._marquee) {
+            const x = Math.min(this._marquee.x1, this._marquee.x2);
+            const y = Math.min(this._marquee.y1, this._marquee.y2);
+            overlays.selectionRect = {
+                x, y,
+                w: Math.abs(this._marquee.x2 - this._marquee.x1) + 1,
+                h: Math.abs(this._marquee.y2 - this._marquee.y1) + 1,
+            };
+        }
+        return overlays;
+    }
+
+    getCursor() { return 'default'; }
+}
+
+// --- tools/text.js ---
+// === Text Tool: click to place a textbox and start editing ===
+
+class TextTool extends BaseTool {
+    constructor(app) {
+        super('text', app);
+    }
+
+    onMouseDown(col, row, e) {
+        const app = this.app;
+
+        // If clicking on an existing text component, select and edit it
+        const hit = app.hitTest(col, row);
+        if (hit && hit.props.text !== undefined) {
+            app.selectComponent(hit);
+            const rect = app.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            app._startInlineEdit(hit, px, py);
+            return;
+        }
+
+        // Create a new textbox at click position
+        app.pushUndo();
+        const comp = ComponentRegistry.create('textbox', col, row, {});
+        comp.zIndex = app.components.length;
+        app.components.push(comp);
+        app.selectComponent(comp);
+        app.render();
+
+        // Immediately open inline editor
+        const rect = app.canvas.getBoundingClientRect();
+        const px = comp.x * app.renderer.charWidth + rect.left;
+        const py = comp.y * app.renderer.charHeight + rect.top;
+        app._startInlineEdit(comp, px - rect.left, py - rect.top);
+    }
+
+    getCursor() { return 'text'; }
+}
+
+// --- tools/line.js ---
+// === Line Tool: click-drag to draw lines/arrows at any angle ===
+
+class LineTool extends BaseTool {
+    constructor(app, isArrow) {
+        super(isArrow ? 'arrow' : 'line', app);
+        this._isArrow = isArrow;
+        this._drawing = false;
+        this._startCol = 0;
+        this._startRow = 0;
+        this._endCol = 0;
+        this._endRow = 0;
+        this._preview = null;
+    }
+
+    activate() {
+        this._drawing = false;
+        this._preview = null;
+    }
+
+    deactivate() {
+        this._drawing = false;
+        this._preview = null;
+    }
+
+    onMouseDown(col, row, e) {
+        this._drawing = true;
+        this._startCol = col;
+        this._startRow = row;
+        this._endCol = col;
+        this._endRow = row;
+        this._updatePreview();
+        this.app.render();
+    }
+
+    onMouseMove(col, row, e) {
+        if (!this._drawing) return;
+        this._endCol = col;
+        this._endRow = row;
+        this._updatePreview();
+        this.app.render();
+    }
+
+    onMouseUp(col, row, e) {
+        if (!this._drawing) return;
+        this._drawing = false;
+        this._endCol = col;
+        this._endRow = row;
+        this._updatePreview();
+
+        if (!this._preview) {
+            this._preview = null;
+            this.app.render();
+            return;
+        }
+
+        const p = this._preview;
+        const type = this._isArrow ? 'arrow' : 'line';
+        const props = { flipped: p.flipped };
+        if (this._isArrow) {
+            props.reversed = p.reversed;
+        }
+
+        this.app.pushUndo();
+        const comp = ComponentRegistry.create(type, p.x, p.y, props);
+        comp.w = p.w;
+        comp.h = p.h;
+        comp.zIndex = this.app.components.length;
+        this.app.components.push(comp);
+        this.app.selectComponent(comp);
+        this.app._toast(`Added ${type}`);
+
+        this._preview = null;
+        this.app.setTool('select');
+    }
+
+    _updatePreview() {
+        const dx = this._endCol - this._startCol;
+        const dy = this._endRow - this._startRow;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        if (absDx < 1 && absDy < 1) {
+            this._preview = null;
+            return;
+        }
+
+        const x = Math.min(this._startCol, this._endCol);
+        const y = Math.min(this._startRow, this._endRow);
+        const w = Math.max(1, absDx + 1);
+        const h = Math.max(1, absDy + 1);
+
+        // flipped = TR→BL (dx and dy have opposite signs)
+        const flipped = (dx > 0 && dy < 0) || (dx < 0 && dy > 0);
+
+        // reversed = arrowhead at Bresenham start instead of end
+        const eRelX = this._endCol - x;
+        const eRelY = this._endRow - y;
+        let reversed;
+        if (!flipped) {
+            reversed = (eRelX === 0 && eRelY === 0);
+        } else {
+            reversed = (eRelX === w - 1 && eRelY === 0);
+        }
+
+        this._preview = { x, y, w, h, flipped, reversed };
+    }
+
+    getOverlays() {
+        const overlays = {};
+        if (this._preview) {
+            overlays.linePreview = this._preview;
+        }
+        return overlays;
+    }
+
+    getCursor() { return 'crosshair'; }
+}
+
+// --- tools/pencil.js ---
+// === Pencil Tool: freehand character drawing ===
+
+class PencilTool extends BaseTool {
+    constructor(app) {
+        super('pencil', app);
+        this._drawing = false;
+        this._drawChar = '*';
+        this._previewCells = [];
+    }
+
+    activate() {
+        this._drawing = false;
+        this._previewCells = [];
+    }
+
+    deactivate() {
+        this._drawing = false;
+        this._previewCells = [];
+    }
+
+    onMouseDown(col, row, e) {
+        this._drawing = true;
+        this._previewCells = [];
+        this.app.pushUndo();
+        this._drawAt(col, row);
+    }
+
+    onMouseMove(col, row, e) {
+        if (this._drawing) {
+            this._drawAt(col, row);
+        } else {
+            this._previewCells = [{ col, row }];
+            this.app.render();
+        }
+    }
+
+    onMouseUp(col, row, e) {
+        this._drawing = false;
+        this._previewCells = [];
+        this.app.render();
+    }
+
+    _drawAt(col, row) {
+        // Create or find the "freehand" textbox component that spans the grid
+        let freehand = this.app.components.find(c => c.type === 'textbox' && c.name === '_freehand');
+        if (!freehand) {
+            freehand = ComponentRegistry.create('textbox', 0, 0, {
+                text: '',
+                name: '_freehand',
+            });
+            freehand.w = GRID_COLS;
+            freehand.h = GRID_ROWS;
+            freehand.name = '_freehand';
+            freehand.zIndex = -1000; // Below everything
+            // Initialize empty text grid
+            const lines = [];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                lines.push(' '.repeat(GRID_COLS));
+            }
+            freehand.props.text = lines.join('\n');
+            this.app.components.push(freehand);
+        }
+
+        // Set the character at (col, row) in the freehand text
+        const lines = freehand.props.text.split('\n');
+        while (lines.length <= row) lines.push(' '.repeat(GRID_COLS));
+        const line = lines[row].padEnd(GRID_COLS);
+        lines[row] = line.substring(0, col) + this._drawChar + line.substring(col + 1);
+        freehand.props.text = lines.join('\n');
+
+        this.app.render();
+    }
+
+    getOverlays() {
+        return { drawPreview: this._previewCells };
+    }
+
+    getCursor() { return 'crosshair'; }
+}
+
+// --- tools/eraser.js ---
+// === Eraser Tool: click to delete a component, drag region to delete all within ===
+
+class EraserTool extends BaseTool {
+    constructor(app) {
+        super('eraser', app);
+        this._dragging = false;
+        this._startCol = 0;
+        this._startRow = 0;
+        this._endCol = 0;
+        this._endRow = 0;
+        this._marquee = null;
+    }
+
+    activate() {
+        this._dragging = false;
+        this._marquee = null;
+    }
+
+    deactivate() {
+        this._dragging = false;
+        this._marquee = null;
+    }
+
+    onMouseDown(col, row, e) {
+        this._dragging = true;
+        this._startCol = col;
+        this._startRow = row;
+        this._endCol = col;
+        this._endRow = row;
+        this._marquee = null;
+    }
+
+    onMouseMove(col, row, e) {
+        if (!this._dragging) return;
+        this._endCol = col;
+        this._endRow = row;
+
+        // Build marquee rect
+        const x = Math.min(this._startCol, this._endCol);
+        const y = Math.min(this._startRow, this._endRow);
+        const w = Math.abs(this._endCol - this._startCol) + 1;
+        const h = Math.abs(this._endRow - this._startRow) + 1;
+        this._marquee = { x, y, w, h };
+        this.app.render();
+    }
+
+    onMouseUp(col, row, e) {
+        if (!this._dragging) return;
+        this._dragging = false;
+
+        const x = Math.min(this._startCol, col);
+        const y = Math.min(this._startRow, row);
+        const w = Math.abs(col - this._startCol) + 1;
+        const h = Math.abs(row - this._startRow) + 1;
+
+        // Small region (≤ 2 cells) — treat as single click, use start position
+        if (w <= 2 && h <= 2) {
+            const hit = this.app.hitTest(this._startCol, this._startRow);
+            if (hit && !hit.locked) {
+                this.app.deleteComponent(hit);
+            } else {
+                this.app._toast('Nothing to erase here');
+            }
+        } else {
+            // Region drag: delete all components that overlap the marquee
+            const toDelete = this.app.components.filter(c =>
+                c.visible && !c.locked && c.name !== '_freehand' &&
+                c.x < x + w && c.x + c.w > x &&
+                c.y < y + h && c.y + c.h > y
+            );
+            if (toDelete.length > 0) {
+                this.app.pushUndo();
+                for (const comp of toDelete) {
+                    const idx = this.app.components.indexOf(comp);
+                    if (idx >= 0) this.app.components.splice(idx, 1);
+                }
+                if (toDelete.includes(this.app.selectedComponent)) {
+                    this.app.selectedComponent = null;
+                    this.app.inspectorUI.update(null);
+                }
+                this.app.layersUI.update();
+                this.app.statusBarUI.updateCount(
+                    this.app.components.filter(c => c.name !== '_freehand').length
+                );
+                this.app._toast(`Deleted ${toDelete.length} component${toDelete.length > 1 ? 's' : ''}`);
+            } else {
+                this.app._toast('No components in region');
+            }
+        }
+
+        this._marquee = null;
+        this.app.render();
+    }
+
+    getOverlays() {
+        const overlays = {};
+        if (this._marquee) {
+            overlays.selectionRect = this._marquee;
+        }
+        return overlays;
+    }
+
+    getCursor() { return 'crosshair'; }
+}
+
+// --- tools/brush.js ---
+// === Brush Tool: draw with box-drawing characters ===
+
+class BrushTool extends BaseTool {
+    constructor(app) {
+        super('brush', app);
+        this._drawing = false;
+        this._lastCol = -1;
+        this._lastRow = -1;
+        this._previewCells = [];
+    }
+
+    activate() {
+        this._drawing = false;
+        this._previewCells = [];
+    }
+
+    deactivate() {
+        this._drawing = false;
+        this._previewCells = [];
+    }
+
+    onMouseDown(col, row, e) {
+        this._drawing = true;
+        this._lastCol = col;
+        this._lastRow = row;
+        this.app.pushUndo();
+        this._brushAt(col, row, col, row);
+    }
+
+    onMouseMove(col, row, e) {
+        if (this._drawing) {
+            this._brushAt(this._lastCol, this._lastRow, col, row);
+            this._lastCol = col;
+            this._lastRow = row;
+        } else {
+            this._previewCells = [{ col, row }];
+            this.app.render();
+        }
+    }
+
+    onMouseUp(col, row, e) {
+        this._drawing = false;
+        this._lastCol = -1;
+        this._lastRow = -1;
+        this._previewCells = [];
+        this.app.render();
+    }
+
+    _brushAt(fromCol, fromRow, toCol, toRow) {
+        // Get or create freehand layer
+        let freehand = this.app.components.find(c => c.type === 'textbox' && c.name === '_freehand');
+        if (!freehand) {
+            freehand = ComponentRegistry.create('textbox', 0, 0, {
+                text: '',
+                name: '_freehand',
+            });
+            freehand.w = GRID_COLS;
+            freehand.h = GRID_ROWS;
+            freehand.name = '_freehand';
+            freehand.zIndex = -1000;
+            const lines = [];
+            for (let r = 0; r < GRID_ROWS; r++) {
+                lines.push(' '.repeat(GRID_COLS));
+            }
+            freehand.props.text = lines.join('\n');
+            this.app.components.push(freehand);
+        }
+
+        const bc = BORDER_CHARS.single;
+        const lines = freehand.props.text.split('\n');
+        while (lines.length < GRID_ROWS) lines.push(' '.repeat(GRID_COLS));
+
+        // Draw line from (fromCol,fromRow) to (toCol,toRow) using box chars
+        const dx = toCol - fromCol;
+        const dy = toRow - fromRow;
+
+        if (Math.abs(dx) >= Math.abs(dy)) {
+            // Mostly horizontal
+            const steps = Math.max(1, Math.abs(dx));
+            for (let i = 0; i <= steps; i++) {
+                const c = fromCol + Math.round(dx * i / steps);
+                const r = fromRow + Math.round(dy * i / steps);
+                this._setChar(lines, c, r, bc.h);
+            }
+        } else {
+            // Mostly vertical
+            const steps = Math.max(1, Math.abs(dy));
+            for (let i = 0; i <= steps; i++) {
+                const c = fromCol + Math.round(dx * i / steps);
+                const r = fromRow + Math.round(dy * i / steps);
+                this._setChar(lines, c, r, bc.v);
+            }
+        }
+
+        freehand.props.text = lines.join('\n');
+        this.app.render();
+    }
+
+    _setChar(lines, col, row, ch) {
+        if (row < 0 || row >= lines.length || col < 0 || col >= GRID_COLS) return;
+        const line = lines[row].padEnd(GRID_COLS);
+        lines[row] = line.substring(0, col) + ch + line.substring(col + 1);
+    }
+
+    getOverlays() {
+        return { drawPreview: this._previewCells };
+    }
+
+    getCursor() { return 'crosshair'; }
+}
+
+// --- ui/eventbus.js ---
+// === EventBus: simple pub/sub system ===
+
+class EventBus {
+    constructor() {
+        this._listeners = {};
+    }
+
+    on(event, fn) {
+        if (!this._listeners[event]) this._listeners[event] = [];
+        this._listeners[event].push(fn);
+    }
+
+    off(event, fn) {
+        const list = this._listeners[event];
+        if (!list) return;
+        this._listeners[event] = list.filter(f => f !== fn);
+    }
+
+    emit(event, ...args) {
+        const list = this._listeners[event];
+        if (!list) return;
+        for (const fn of list) {
+            fn(...args);
+        }
+    }
+}
+
+// --- ui/toolbar.js ---
+// === Toolbar: top action buttons ===
+
+class ToolbarUI {
+    constructor(app) {
+        this.app = app;
+        this._bind();
+    }
+
+    _bind() {
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            this.app.bus.emit('action', 'undo');
+        });
+        document.getElementById('btn-redo').addEventListener('click', () => {
+            this.app.bus.emit('action', 'redo');
+        });
+        document.getElementById('btn-copy-md').addEventListener('click', () => {
+            this.app.bus.emit('action', 'copyMarkdown');
+        });
+        document.getElementById('btn-paste-md').addEventListener('click', () => {
+            this.app.bus.emit('action', 'pasteMarkdown');
+        });
+        document.getElementById('btn-save').addEventListener('click', () => {
+            this.app.bus.emit('action', 'save');
+        });
+        document.getElementById('btn-load').addEventListener('click', () => {
+            this.app.bus.emit('action', 'load');
+        });
+        document.getElementById('btn-new').addEventListener('click', () => {
+            this.app.bus.emit('action', 'new');
+        });
+    }
+}
+
+// --- ui/palette.js ---
+// === Palette: left panel with tools and element library ===
+
+class PaletteUI {
+    constructor(app) {
+        this.app = app;
+        this._buildTools();
+        this._buildElements();
+    }
+
+    _buildTools() {
+        const section = document.getElementById('tools-section');
+        for (const tool of TOOL_DEFS) {
+            const item = document.createElement('div');
+            item.className = 'panel-item' + (tool.id === 'select' ? ' active' : '');
+            item.dataset.tool = tool.id;
+            item.innerHTML = `<span class="icon">${tool.icon}</span>${tool.label}<span class="shortcut">${tool.shortcut}</span>`;
+            item.addEventListener('click', () => {
+                this.app.setTool(tool.id);
+            });
+            section.appendChild(item);
+        }
+    }
+
+    _buildElements() {
+        const section = document.getElementById('elements-section');
+        for (const elem of ELEMENT_PALETTE) {
+            const item = document.createElement('div');
+            item.className = 'elem-item';
+            item.dataset.type = elem.type;
+            item.draggable = true;
+            item.innerHTML = `<span class="preview">${elem.preview}</span>${elem.label}`;
+
+            // Click to add at center of visible area
+            item.addEventListener('click', () => {
+                this.app.addComponentAtCenter(elem.type);
+            });
+
+            // Drag to place
+            item.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', elem.type);
+                e.dataTransfer.effectAllowed = 'copy';
+            });
+
+            section.appendChild(item);
+        }
+    }
+
+    updateActiveTool(toolId) {
+        const items = document.querySelectorAll('.panel-item[data-tool]');
+        for (const item of items) {
+            item.classList.toggle('active', item.dataset.tool === toolId);
+        }
+    }
+}
+
+// --- ui/inspector.js ---
+// === Inspector: right panel property editor ===
+
+class InspectorUI {
+    constructor(app) {
+        this.app = app;
+        this._container = document.getElementById('inspector-content');
+    }
+
+    update(component) {
+        this._container.innerHTML = '';
+        if (!component) {
+            this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>';
+            return;
+        }
+
+        // Type label
+        const typeDiv = document.createElement('div');
+        typeDiv.style.cssText = 'padding: 6px 10px; font-size: 12px; color: #89b4fa; font-weight: 600;';
+        typeDiv.textContent = component.type.charAt(0).toUpperCase() + component.type.slice(1);
+        this._container.appendChild(typeDiv);
+
+        // Name
+        this._addPropRow('Name', 'name', component.name, 'text', (val) => {
+            component.name = val;
+            this.app.bus.emit('componentChanged', component);
+        });
+
+        // Editable props
+        const props = component.getEditableProps();
+        for (const prop of props) {
+            const currentVal = prop.propsBased ? component.props[prop.key] : component.getProp(prop.key);
+            if (prop.type === 'select') {
+                this._addSelectRow(prop.label, prop.key, currentVal, prop.options, (val) => {
+                    if (prop.propsBased) {
+                        // Handle boolean-ish strings
+                        if (val === 'true') val = true;
+                        else if (val === 'false') val = false;
+                        component.props[prop.key] = val;
+                    } else {
+                        component.setProp(prop.key, val);
+                    }
+                    this.app.bus.emit('componentChanged', component);
+                    this.app.render();
+                });
+            } else {
+                this._addPropRow(prop.label, prop.key, currentVal, prop.type, (val) => {
+                    if (prop.propsBased) {
+                        if (prop.type === 'number') val = parseInt(val, 10) || 0;
+                        component.props[prop.key] = val;
+                    } else {
+                        component.setProp(prop.key, val);
+                    }
+                    this.app.bus.emit('componentChanged', component);
+                    this.app.render();
+                });
+            }
+        }
+
+        // Z-index
+        this._addPropRow('Z-Index', 'zIndex', component.zIndex, 'number', (val) => {
+            component.zIndex = parseInt(val, 10) || 0;
+            this.app.bus.emit('componentChanged', component);
+            this.app.render();
+        });
+    }
+
+    _addPropRow(label, key, value, type, onChange) {
+        const row = document.createElement('div');
+        row.className = 'prop-row';
+
+        const lbl = document.createElement('span');
+        lbl.className = 'prop-label';
+        lbl.textContent = label;
+
+        const input = document.createElement('input');
+        input.className = 'prop-input';
+        input.type = type === 'number' ? 'number' : 'text';
+        input.value = value !== undefined ? value : '';
+        input.addEventListener('change', () => onChange(input.value));
+        input.addEventListener('keydown', (e) => e.stopPropagation()); // prevent tool shortcuts
+
+        row.appendChild(lbl);
+        row.appendChild(input);
+        this._container.appendChild(row);
+    }
+
+    _addSelectRow(label, key, value, options, onChange) {
+        const row = document.createElement('div');
+        row.className = 'prop-row';
+
+        const lbl = document.createElement('span');
+        lbl.className = 'prop-label';
+        lbl.textContent = label;
+
+        const select = document.createElement('select');
+        select.className = 'prop-select';
+        for (const opt of options) {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            if (String(value) === String(opt)) o.selected = true;
+            select.appendChild(o);
+        }
+        select.addEventListener('change', () => onChange(select.value));
+
+        row.appendChild(lbl);
+        row.appendChild(select);
+        this._container.appendChild(row);
+    }
+}
+
+// --- ui/layers.js ---
+// === Layers Panel: component list with visibility/reorder ===
+
+class LayersUI {
+    constructor(app) {
+        this.app = app;
+        this._container = document.getElementById('layers-content');
+    }
+
+    update() {
+        this._container.innerHTML = '';
+        // Show components in reverse z-order (top first)
+        const sorted = [...this.app.components]
+            .filter(c => c.name !== '_freehand')
+            .sort((a, b) => b.zIndex - a.zIndex);
+
+        for (const comp of sorted) {
+            const item = document.createElement('div');
+            item.className = 'layer-item' + (this.app.selectedComponent === comp ? ' selected' : '');
+
+            const vis = document.createElement('span');
+            vis.className = 'vis-toggle';
+            vis.textContent = comp.visible ? '■' : '□';
+            vis.addEventListener('click', (e) => {
+                e.stopPropagation();
+                comp.visible = !comp.visible;
+                this.app.render();
+                this.update();
+            });
+
+            const name = document.createElement('span');
+            name.className = 'layer-name';
+            name.textContent = comp.name;
+
+            const actions = document.createElement('span');
+            actions.className = 'layer-actions';
+
+            const upBtn = document.createElement('button');
+            upBtn.className = 'layer-btn';
+            upBtn.textContent = '▲';
+            upBtn.title = 'Move up';
+            upBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                comp.zIndex++;
+                this.app.render();
+                this.update();
+            });
+
+            const downBtn = document.createElement('button');
+            downBtn.className = 'layer-btn';
+            downBtn.textContent = '▼';
+            downBtn.title = 'Move down';
+            downBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                comp.zIndex--;
+                this.app.render();
+                this.update();
+            });
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'layer-btn';
+            delBtn.textContent = '×';
+            delBtn.title = 'Delete';
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.app.deleteComponent(comp);
+            });
+
+            actions.appendChild(upBtn);
+            actions.appendChild(downBtn);
+            actions.appendChild(delBtn);
+
+            item.appendChild(vis);
+            item.appendChild(name);
+            item.appendChild(actions);
+
+            item.addEventListener('click', () => {
+                this.app.selectComponent(comp);
+            });
+
+            this._container.appendChild(item);
+        }
+
+        if (sorted.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'padding: 10px; color: #6c7086; font-size: 11px;';
+            empty.textContent = 'No components';
+            this._container.appendChild(empty);
+        }
+    }
+}
+
+// --- ui/splitter.js ---
+// === Splitter: resizable panel borders ===
+
+class PanelSplitter {
+    constructor(splitterEl, panelEl, side, options = {}) {
+        this._splitter = splitterEl;
+        this._panel = panelEl;
+        this._side = side; // 'left' or 'right'
+        this._minWidth = options.minWidth || 100;
+        this._maxWidth = options.maxWidth || 400;
+        this._dragging = false;
+        this._startX = 0;
+        this._startWidth = 0;
+        this._onResize = options.onResize || null;
+        this._bind();
+    }
+
+    _bind() {
+        this._splitter.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            this._dragging = true;
+            this._startX = e.clientX;
+            this._startWidth = this._panel.offsetWidth;
+            this._splitter.classList.add('active');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!this._dragging) return;
+            let delta;
+            if (this._side === 'left') {
+                delta = e.clientX - this._startX;
+            } else {
+                delta = this._startX - e.clientX;
+            }
+            const newWidth = Math.min(this._maxWidth, Math.max(this._minWidth, this._startWidth + delta));
+            this._panel.style.width = newWidth + 'px';
+            if (this._onResize) this._onResize();
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (!this._dragging) return;
+            this._dragging = false;
+            this._splitter.classList.remove('active');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            if (this._onResize) this._onResize();
+        });
+    }
+}
+
+// --- ui/statusbar.js ---
+// === StatusBar: bottom info bar ===
+
+class StatusBarUI {
+    constructor(app) {
+        this.app = app;
+        this._pos = document.getElementById('status-pos');
+        this._grid = document.getElementById('status-grid');
+        this._count = document.getElementById('status-count');
+        this._tool = document.getElementById('status-tool');
+    }
+
+    updatePos(col, row) {
+        this._pos.textContent = `Ln ${row + 1}, Col ${col + 1}`;
+    }
+
+    updateGrid(cols, rows) {
+        this._grid.textContent = `${cols}×${rows}`;
+    }
+
+    updateCount(n) {
+        this._count.textContent = `Components: ${n}`;
+    }
+
+    updateTool(name) {
+        this._tool.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+    }
+}
+
+// --- ui/app.js ---
+// === App: main orchestrator ===
+
+class App {
+    constructor() {
+        this.bus = new EventBus();
+        this.grid = new CharGrid();
+        this.canvas = document.getElementById('grid-canvas');
+        this.renderer = new CanvasRenderer(this.canvas);
+        this.history = new UndoManager();
+        this.components = [];
+        this.selectedComponent = null;
+        this.currentToolId = 'select';
+        this._cursorCol = 0;
+        this._cursorRow = 0;
+        this._clipboard = null;
+
+        // Tools
+        this._tools = {
+            select: new SelectTool(this),
+            text: new TextTool(this),
+            line: new LineTool(this, false),
+            arrow: new LineTool(this, true),
+            eraser: new EraserTool(this),
+        };
+        this._activeTool = this._tools.select;
+
+        // UI
+        this.toolbarUI = new ToolbarUI(this);
+        this.paletteUI = new PaletteUI(this);
+        this.inspectorUI = new InspectorUI(this);
+        this.layersUI = new LayersUI(this);
+        this.statusBarUI = new StatusBarUI(this);
+
+        // Splitters
+        this._leftSplitter = new PanelSplitter(
+            document.getElementById('left-splitter'),
+            document.getElementById('left-panel'),
+            'left',
+            { minWidth: 100, maxWidth: 300, onResize: () => this.render() }
+        );
+        this._rightSplitter = new PanelSplitter(
+            document.getElementById('right-splitter'),
+            document.getElementById('right-panel'),
+            'right',
+            { minWidth: 140, maxWidth: 400, onResize: () => this.render() }
+        );
+
+        // Init
+        this.renderer.resizeToGrid(this.grid.cols, this.grid.rows);
+        this.statusBarUI.updateGrid(this.grid.cols, this.grid.rows);
+        this.statusBarUI.updateCount(0);
+
+        this._bindEvents();
+        this._loadAutoSave();
+        this.render();
+    }
+
+    _bindEvents() {
+        // Canvas mouse events
+        const canvasArea = document.getElementById('canvas-area');
+
+        this.canvas.addEventListener('mousedown', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { col, row } = this.renderer.pixelToGrid(px, py);
+            this._activeTool.onMouseDown(col, row, e);
+        });
+
+        this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { col, row } = this.renderer.pixelToGrid(px, py);
+            this._cursorCol = col;
+            this._cursorRow = row;
+            this.statusBarUI.updatePos(col, row);
+            this._activeTool.onMouseMove(col, row, e);
+        });
+
+        // mouseup on document so it fires even if mouse leaves canvas
+        document.addEventListener('mouseup', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { col, row } = this.renderer.pixelToGrid(px, py);
+            this._activeTool.onMouseUp(col, row, e);
+        });
+
+        this.canvas.addEventListener('mouseleave', () => {
+            this._cursorCol = -1;
+            this._cursorRow = -1;
+            this.render();
+        });
+
+        // Double-click to edit text
+        this.canvas.addEventListener('dblclick', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { col, row } = this.renderer.pixelToGrid(px, py);
+            const hit = this.hitTest(col, row);
+            if (hit && hit.props.text !== undefined) {
+                this._startInlineEdit(hit, px, py);
+            } else if (hit && hit.props.label !== undefined) {
+                this._startInlineEdit(hit, px, py, 'label');
+            } else if (hit && hit.props.title !== undefined) {
+                this._startInlineEdit(hit, px, py, 'title');
+            }
+        });
+
+        // Drag-and-drop from palette
+        this.canvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        this.canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const type = e.dataTransfer.getData('text/plain');
+            if (!type) return;
+            const rect = this.canvas.getBoundingClientRect();
+            const px = e.clientX - rect.left;
+            const py = e.clientY - rect.top;
+            const { col, row } = this.renderer.pixelToGrid(px, py);
+            this.addComponentAt(type, col, row);
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Don't intercept when editing inputs
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            const key = this._getShortcutKey(e);
+            const action = SHORTCUTS[key] || SHORTCUTS[e.key];
+            if (action) {
+                e.preventDefault();
+                this._handleAction(action);
+            }
+        });
+
+        // EventBus actions
+        this.bus.on('action', (action) => this._handleAction(action));
+        this.bus.on('componentChanged', () => {
+            this.render();
+            this.layersUI.update();
+        });
+
+        // Auto-save every 30 seconds
+        setInterval(() => this._autoSave(), 30000);
+
+        // Window resize
+        window.addEventListener('resize', () => this.render());
+    }
+
+    _getShortcutKey(e) {
+        const parts = [];
+        if (e.ctrlKey) parts.push('ctrl');
+        if (e.metaKey) parts.push('meta');
+        if (e.shiftKey) parts.push('shift');
+        if (e.altKey) parts.push('alt');
+        parts.push(e.key);
+        return parts.join('+');
+    }
+
+    _handleAction(action) {
+        if (action.startsWith('tool:')) {
+            this.setTool(action.substring(5));
+            return;
+        }
+
+        switch (action) {
+            case 'undo': this.undo(); break;
+            case 'redo': this.redo(); break;
+            case 'delete': this.deleteSelected(); break;
+            case 'deselect': this.selectComponent(null); break;
+            case 'selectAll':
+                if (this.components.length > 0) {
+                    this.selectComponent(this.components[this.components.length - 1]);
+                }
+                break;
+            case 'copy': this.copySelected(); break;
+            case 'paste': this.pasteClipboard(); break;
+            case 'cut': this.cutSelected(); break;
+            case 'save': this.saveToFile(); break;
+            case 'saveAs': this.saveToFile(); break;
+            case 'load': this.loadFromFile(); break;
+            case 'new': this.newCanvas(); break;
+            case 'copyMarkdown': this.copyMarkdown(); break;
+            case 'pasteMarkdown': this.pasteMarkdown(); break;
+            case 'rotate': this.rotateSelected(); break;
+        }
+    }
+
+    // === Tool Management ===
+
+    setTool(toolId) {
+        if (this._activeTool) this._activeTool.deactivate();
+        this.currentToolId = toolId;
+        this._activeTool = this._tools[toolId] || this._tools.select;
+        this._activeTool.activate();
+        this.canvas.style.cursor = this._activeTool.getCursor();
+        this.paletteUI.updateActiveTool(toolId);
+        this.statusBarUI.updateTool(toolId);
+        this.render();
+    }
+
+    // === Component Management ===
+
+    addComponentAt(type, col, row) {
+        this.pushUndo();
+        const comp = ComponentRegistry.create(type, col, row);
+        comp.zIndex = this.components.length;
+        this.components.push(comp);
+        this.selectComponent(comp);
+        this.render();
+        this._toast(`Added ${type}`);
+    }
+
+    addComponentAtCenter(type) {
+        const defaults = ComponentRegistry.getDefaults(type);
+        const col = Math.floor((GRID_COLS - (defaults?.w || 10)) / 2);
+        const row = Math.floor((GRID_ROWS - (defaults?.h || 4)) / 2);
+        this.addComponentAt(type, col, row);
+    }
+
+    selectComponent(comp) {
+        this.selectedComponent = comp;
+        this.inspectorUI.update(comp);
+        this.layersUI.update();
+        this.render();
+    }
+
+    deleteComponent(comp) {
+        this.pushUndo();
+        const idx = this.components.indexOf(comp);
+        if (idx >= 0) {
+            this.components.splice(idx, 1);
+            if (this.selectedComponent === comp) {
+                this.selectedComponent = null;
+                this.inspectorUI.update(null);
+            }
+            this.layersUI.update();
+            this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+            this.render();
+            this._toast('Deleted component');
+        }
+    }
+
+    deleteSelected() {
+        if (this.selectedComponent && !this.selectedComponent.locked) {
+            this.deleteComponent(this.selectedComponent);
+        }
+    }
+
+    hitTest(col, row) {
+        // Reverse z-order: topmost first
+        const sorted = [...this.components]
+            .filter(c => c.visible && c.name !== '_freehand')
+            .sort((a, b) => b.zIndex - a.zIndex);
+        for (const comp of sorted) {
+            if (comp.contains(col, row)) return comp;
+        }
+        return null;
+    }
+
+    // === Undo / Redo ===
+
+    pushUndo() {
+        this.history.push(this.components);
+    }
+
+    undo() {
+        const restored = this.history.undo(this.components);
+        if (restored) {
+            this.components = restored;
+            this.selectedComponent = null;
+            this.inspectorUI.update(null);
+            this.layersUI.update();
+            this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+            this.render();
+            this._toast('Undo');
+        }
+    }
+
+    redo() {
+        const restored = this.history.redo(this.components);
+        if (restored) {
+            this.components = restored;
+            this.selectedComponent = null;
+            this.inspectorUI.update(null);
+            this.layersUI.update();
+            this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+            this.render();
+            this._toast('Redo');
+        }
+    }
+
+    // === Copy / Paste ===
+
+    copySelected() {
+        if (this.selectedComponent) {
+            this._clipboard = this.selectedComponent.serialize();
+            this._toast('Copied');
+        }
+    }
+
+    pasteClipboard() {
+        if (this._clipboard) {
+            this.pushUndo();
+            const data = JSON.parse(JSON.stringify(this._clipboard));
+            data.id = ++_componentIdCounter;
+            data.name = `${data.type}_${data.id}`;
+            data.x += 2;
+            data.y += 1;
+            const comp = ComponentRegistry.deserialize(data);
+            comp.zIndex = this.components.length;
+            this.components.push(comp);
+            this.selectComponent(comp);
+            this.render();
+            this._toast('Pasted');
+        }
+    }
+
+    cutSelected() {
+        if (this.selectedComponent) {
+            this.copySelected();
+            this.deleteSelected();
+            this._toast('Cut');
+        }
+    }
+
+    rotateSelected() {
+        const comp = this.selectedComponent;
+        if (!comp || comp.locked) return;
+        this.pushUndo();
+
+        if (comp.type === 'line' || comp.type === 'arrow') {
+            // Swap w and h + toggle flipped = 90° rotation
+            const oldW = comp.w;
+            comp.w = comp.h;
+            comp.h = oldW;
+            comp.props.flipped = !comp.props.flipped;
+        } else {
+            // General rotation: swap w and h
+            const oldW = comp.w;
+            comp.w = comp.h;
+            comp.h = oldW;
+        }
+
+        // Keep within grid bounds
+        if (comp.x + comp.w > GRID_COLS) comp.x = Math.max(0, GRID_COLS - comp.w);
+        if (comp.y + comp.h > GRID_ROWS) comp.y = Math.max(0, GRID_ROWS - comp.h);
+
+        this.inspectorUI.update(comp);
+        this.render();
+        this._toast('Rotated');
+    }
+
+    // === File Operations ===
+
+    saveToFile() {
+        ExportUtils.saveToFile(this.components);
+        this._toast('Saved to file');
+    }
+
+    async loadFromFile() {
+        try {
+            const components = await ExportUtils.loadFromFile();
+            this.pushUndo();
+            this.components = components;
+            this.selectedComponent = null;
+            this.inspectorUI.update(null);
+            this.layersUI.update();
+            this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+            this.render();
+            this._toast('Loaded from file');
+        } catch (err) {
+            this._toast('Load failed: ' + err.message);
+        }
+    }
+
+    newCanvas() {
+        if (this.components.length > 0 && !confirm('Clear canvas? Unsaved changes will be lost.')) return;
+        this.pushUndo();
+        this.components = [];
+        this.selectedComponent = null;
+        this.inspectorUI.update(null);
+        this.layersUI.update();
+        this.statusBarUI.updateCount(0);
+        this.history.clear();
+        localStorage.removeItem('kaomoji_project');
+        this.render();
+        this._toast('New canvas');
+    }
+
+    async copyMarkdown() {
+        this.grid.composite(this.components.filter(c => c.visible));
+        const md = ExportUtils.exportAsMarkdown(this.grid);
+        const ok = await ExportUtils.copyToClipboard(md);
+        this._toast(ok ? 'Markdown copied!' : 'Copy failed');
+    }
+
+    async pasteMarkdown() {
+        try {
+            let text = await navigator.clipboard.readText();
+            if (!text) { this._toast('Clipboard is empty'); return; }
+            // Strip markdown code fence if present
+            text = text.replace(/^```[^\n]*\n/, '').replace(/\n```\s*$/, '');
+            const lines = text.split('\n');
+            const h = lines.length;
+            const w = Math.max(...lines.map(l => l.length));
+            if (w === 0 || h === 0) { this._toast('Nothing to paste'); return; }
+            // Pad lines to equal width
+            const padded = lines.map(l => l.padEnd(w));
+            this.pushUndo();
+            const comp = new TextBoxComponent(0, 0, w, h, { text: padded.join('\n') });
+            comp.id = ++_componentIdCounter;
+            comp.name = `textbox_${comp.id}`;
+            comp.zIndex = this.components.length;
+            this.components.push(comp);
+            this.selectComponent(comp);
+            this.render();
+            this._toast('Pasted markdown');
+        } catch (err) {
+            this._toast('Paste failed: ' + err.message);
+        }
+    }
+
+    // === Inline Text Editing ===
+
+    _startInlineEdit(comp, px, py, propKey = 'text') {
+        const editor = document.getElementById('inline-editor');
+        const canvasArea = document.getElementById('canvas-area');
+        const canvasRect = this.canvas.getBoundingClientRect();
+        const areaRect = canvasArea.getBoundingClientRect();
+
+        const x = comp.x * this.renderer.charWidth + (canvasRect.left - areaRect.left) + canvasArea.scrollLeft;
+        const y = comp.y * this.renderer.charHeight + (canvasRect.top - areaRect.top) + canvasArea.scrollTop;
+
+        editor.style.display = 'block';
+        editor.style.left = x + 'px';
+        editor.style.top = y + 'px';
+        editor.style.width = (comp.w * this.renderer.charWidth) + 'px';
+        editor.style.height = (comp.h * this.renderer.charHeight) + 'px';
+        editor.style.fontSize = this.renderer.fontSize + 'px';
+        editor.style.fontFamily = this.renderer.fontFamily;
+        editor.style.lineHeight = this.renderer.charHeight + 'px';
+        editor.value = comp.props[propKey] || '';
+        editor.focus();
+        editor.select();
+
+        let finished = false;
+        const finish = () => {
+            if (finished) return;
+            finished = true;
+            this.pushUndo();
+            comp.props[propKey] = editor.value;
+            editor.style.display = 'none';
+            editor.removeEventListener('blur', finish);
+            editor.removeEventListener('keydown', onKey);
+            this.render();
+            this.inspectorUI.update(comp);
+        };
+
+        const onKey = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+                editor.style.display = 'none';
+                editor.removeEventListener('blur', finish);
+                editor.removeEventListener('keydown', onKey);
+            } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                finish();
+            }
+        };
+
+        editor.addEventListener('blur', finish);
+        editor.addEventListener('keydown', onKey);
+    }
+
+    // === Rendering ===
+
+    render() {
+        // Composite all visible components onto grid
+        this.grid.composite(this.components.filter(c => c.visible));
+
+        // Build overlays
+        const overlays = this._activeTool.getOverlays();
+        if (this._cursorCol >= 0 && this._cursorRow >= 0) {
+            overlays.cursor = { col: this._cursorCol, row: this._cursorRow };
+        }
+
+        // Render
+        this.renderer.render(this.grid, overlays);
+
+        // Update component count
+        this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+    }
+
+    // === Auto-save ===
+
+    _autoSave() {
+        if (this.components.length > 0) {
+            ExportUtils.saveToLocalStorage(this.components);
+        }
+    }
+
+    _loadAutoSave() {
+        const components = ExportUtils.loadFromLocalStorage();
+        if (components && components.length > 0) {
+            this.components = components;
+            this.layersUI.update();
+            this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+        }
+    }
+
+    // === Toast ===
+
+    _toast(msg, duration = 2000) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(this._toastTimer);
+        this._toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+    }
+}
+
+// === Bootstrap ===
+document.addEventListener('DOMContentLoaded', () => {
+    window.app = new App();
+});
+
+</script>
+<!-- INJECT_JS_END -->
+
+</body>
+</html>
