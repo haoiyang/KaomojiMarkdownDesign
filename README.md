@@ -18,48 +18,36 @@ A browser-based ASCII wireframe editor for designing UI mockups using Unicode bo
 - **Keyboard shortcuts**: Undo/Redo, Copy/Paste/Cut, tool switching, Delete
 - **Dark theme** with Catppuccin-inspired color palette
 
-## Quick Start
+## Claude Code MCP Integration
 
-### Development (multi-file)
-Open `src/index.html` in a browser. Scripts load via individual `<script>` tags.
+The included MCP server lets [Claude Code](https://claude.ai/claude-code) **programmatically build wireframes** through natural language. Ask Claude to design a UI and it creates it directly in the editor — no manual dragging needed.
 
-### Production (single file)
-```bash
-bash build.sh
-# Output: dist/kaomoji-markdown-design.html (~164KB)
-open dist/kaomoji-markdown-design.html
+![MCP Demo](assets/mcp-demo.gif)
+
+### What Claude Can Do
+
+| Capability | Tools | Example |
+|------------|-------|---------|
+| **Add components** | `kaomoji_add_component` | "Add a login card at row 5, col 25" |
+| **Layout & resize** | `kaomoji_move_component`, `kaomoji_resize_component` | "Make the navbar span the full width" |
+| **Set properties** | `kaomoji_set_props` | "Change the card title to Sign In" |
+| **Freehand drawing** | `kaomoji_pencil`, `kaomoji_eraser` | "Draw an ASCII avatar icon" |
+| **Manage canvas** | `kaomoji_list_components`, `kaomoji_delete_component` | "Delete all buttons" |
+| **Undo/Redo** | `kaomoji_undo_redo` | "Undo the last 3 changes" |
+| **Export** | `kaomoji_export`, `kaomoji_export_json` | "Export as markdown" |
+| **Import** | `kaomoji_import_json`, `kaomoji_clear` | "Load this wireframe JSON" |
+| **Inspect** | `kaomoji_status`, `kaomoji_get_component` | "What's on the canvas?" |
+
+**17 tools** total — Claude builds full-page wireframes in seconds:
+
 ```
-
-The single HTML file works from `file://` — no server needed.
-
-## Architecture
-
-MVC pattern with HTML5 Canvas rendering:
-
+"Design a dashboard with a sidebar, navbar, login form, data table, and progress bar"
 ```
-App (orchestrator)
-├── CharGrid (80×40 char buffer + compositing)
-├── CanvasRenderer (fillText per cell)
-├── UndoManager (50-level snapshot stack)
-├── EventBus (pub/sub)
-├── Tools (Select, Pencil, Eraser, Brush)
-├── Components (20 types via ComponentRegistry)
-├── UI Panels (Toolbar, Palette, Inspector, Components, StatusBar)
-└── MCP Bridge (WebSocket client ↔ Python MCP server)
-```
-
-See [CLAUDE.md](CLAUDE.md) for the full development plan.
-
-## MCP Server (Claude Code Integration)
-
-The included MCP server (`mcp/`) lets [Claude Code](https://claude.ai/claude-code) programmatically create and manipulate wireframes via tool calls. Python WebSocket server on port 9878; the browser app auto-connects as a client.
-
-**17 tools**: `kaomoji_status`, `kaomoji_list_components`, `kaomoji_add_component`, `kaomoji_delete_component`, `kaomoji_move_component`, `kaomoji_resize_component`, `kaomoji_set_props`, `kaomoji_get_component`, `kaomoji_select`, `kaomoji_group`, `kaomoji_undo_redo`, `kaomoji_export`, `kaomoji_import_json`, `kaomoji_export_json`, `kaomoji_clear`, `kaomoji_pencil`, `kaomoji_eraser`
 
 ### Setup
 
 ```bash
-# Create venv and install dependencies
+# Install MCP server
 cd mcp && python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
@@ -79,6 +67,72 @@ pip install -r requirements.txt
 ```bash
 cd mcp && source venv/bin/activate && pytest tests/ -v
 ```
+
+## Quick Start
+
+### Development (multi-file)
+Open `src/index.html` in a browser. Scripts load via individual `<script>` tags.
+
+### Production (single file)
+```bash
+bash build.sh
+# Output: dist/kaomoji-markdown-design.html (~165KB)
+open dist/kaomoji-markdown-design.html
+```
+
+The single HTML file works from `file://` — no server needed.
+
+## Example Output
+
+The editor produces clean ASCII wireframes for documentation:
+
+```
+MyApp  Home  About  Docs                                               [Sign In]
+────────────────────────────────────────────────────────────────────────────────
+┌────────────────┐
+│ MENU           │                                          Storage
+│                │                                          [████████░░] 75%
+│ > Dashboard    │       ┌────────────────────────────┐
+│   Users        │       │ Sign In                    │
+│   Settings     │       ├────────────────────────────┤
+│   Reports      │       │ Email                      │
+│                │       │ [you@example.com         ] │
+│                │       │                            │
+│                │       │ Password                   │
+│                │       │ [********                ] │
+│                │       │                            │
+│                │       │ [ ] Remember me            │
+│                │       │                            │
+│                │       │ [       Sign In          ] │
+│                │       │                            │
+│                │       └────────────────────────────┘
+│                │
+│                │       ┌────────────┬────────────┬────────────┬─────────────┐
+│                │       │Name        │Role        │Status      │Action       │
+│                │       ├────────────┼────────────┼────────────┼─────────────┤
+│                │       │            │            │            │             │
+│                │       └────────────┴────────────┴────────────┴─────────────┘
+│                │       Home > Dashboard > Settings       < 1 [2] 3 4 5 >
+└────────────────┘
+```
+
+## Architecture
+
+MVC pattern with HTML5 Canvas rendering:
+
+```
+App (orchestrator)
+├── CharGrid (80×40 char buffer + compositing)
+├── CanvasRenderer (fillText per cell)
+├── UndoManager (50-level snapshot stack)
+├── EventBus (pub/sub)
+├── Tools (Select, Pencil, Eraser, Brush)
+├── Components (20 types via ComponentRegistry)
+├── UI Panels (Toolbar, Palette, Inspector, Components, StatusBar)
+└── MCP Bridge (WebSocket client ↔ Python MCP server)
+```
+
+See [CLAUDE.md](CLAUDE.md) for the full development plan.
 
 ## Dependencies
 
