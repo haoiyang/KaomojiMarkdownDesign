@@ -135,10 +135,10 @@ function lineCharAt(points, i) {
         dx = points[i].x - points[i - 1].x;
         dy = points[i].y - points[i - 1].y;
     } else {
-        return '-';
+        return '─';
     }
-    if (dy === 0) return '-';
-    if (dx === 0) return '|';
+    if (dy === 0) return '─';
+    if (dx === 0) return '│';
     if ((dx > 0 && dy > 0) || (dx < 0 && dy < 0)) return '\\';
     return '/';
 }
