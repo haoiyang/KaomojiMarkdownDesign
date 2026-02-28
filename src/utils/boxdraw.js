@@ -162,18 +162,68 @@ function arrowHeadChar(points, atEnd) {
     return dx > 0 ? '>' : '<';
 }
 
-// === Line Intersection Merging ===
-// Each line character implies directional axes passing through the cell:
-//   H = horizontal, V = vertical, D = forward diagonal (/), B = back diagonal (\)
-// When two line characters occupy the same cell, merge their directions.
+// === Box-Drawing Character Merge (4-direction: U/D/L/R) ===
+// When two box-drawing chars overlap (e.g. adjacent components sharing a border),
+// merge their cardinal directions to produce the correct intersection character
+// (corners → tees, tees → crosses, etc.)
 
+const _BD_U = 1, _BD_D = 2, _BD_L = 4, _BD_R = 8;
+
+// Direction flags for each BORDER_CHARS position
+const _BD_POS_DIRS = {
+    tl: _BD_D | _BD_R,  tr: _BD_D | _BD_L,
+    bl: _BD_U | _BD_R,  br: _BD_U | _BD_L,
+    t: _BD_L | _BD_R,   b: _BD_L | _BD_R,
+    l: _BD_U | _BD_D,   r: _BD_U | _BD_D,
+    h: _BD_L | _BD_R,   v: _BD_U | _BD_D,
+    cross:     _BD_U | _BD_D | _BD_L | _BD_R,
+    tee_down:  _BD_D | _BD_L | _BD_R,
+    tee_up:    _BD_U | _BD_L | _BD_R,
+    tee_right: _BD_U | _BD_D | _BD_R,
+    tee_left:  _BD_U | _BD_D | _BD_L,
+};
+
+// Build lookup tables from BORDER_CHARS
+const _BOX_DIRS = {};      // char → direction flags (OR'd across all positions)
+const _BOX_STYLE = {};     // char → first style name that defines it
+const _BOX_RESULTS = {};   // style → { dirFlags → char }
+
+for (const style of Object.keys(BORDER_CHARS)) {
+    const chars = BORDER_CHARS[style];
+    const resultMap = {};
+    for (const [pos, ch] of Object.entries(chars)) {
+        const dirs = _BD_POS_DIRS[pos];
+        if (dirs === undefined) continue;
+        _BOX_DIRS[ch] = (_BOX_DIRS[ch] || 0) | dirs;
+        if (!_BOX_STYLE[ch]) _BOX_STYLE[ch] = style;
+        resultMap[dirs] = ch;
+    }
+    // Fill single-direction combos (no standard position maps to just U, D, L, or R)
+    resultMap[_BD_L] = resultMap[_BD_L] || chars.h;
+    resultMap[_BD_R] = resultMap[_BD_R] || chars.h;
+    resultMap[_BD_U] = resultMap[_BD_U] || chars.v;
+    resultMap[_BD_D] = resultMap[_BD_D] || chars.v;
+    resultMap[_BD_L | _BD_R] = resultMap[_BD_L | _BD_R] || chars.h;
+    resultMap[_BD_U | _BD_D] = resultMap[_BD_U | _BD_D] || chars.v;
+    _BOX_RESULTS[style] = resultMap;
+}
+
+// === Diagonal Line Intersection Merging (for freehand / line / arrow tool) ===
 const _LINE_DIR_H = 1;
 const _LINE_DIR_V = 2;
 const _LINE_DIR_D = 4;  // /
 const _LINE_DIR_B = 8;  // \
 
+const _PUA_HD  = '\uE001';
+const _PUA_HB  = '\uE002';
+const _PUA_VD  = '\uE003';
+const _PUA_VB  = '\uE004';
+const _PUA_HVD = '\uE005';
+const _PUA_HVB = '\uE006';
+const _PUA_HDB = '\uE007';
+const _PUA_VDB = '\uE008';
+
 const _LINE_CHAR_DIRS = {
-    // ASCII line chars (from line/arrow components)
     '-': _LINE_DIR_H, '>': _LINE_DIR_H, '<': _LINE_DIR_H,
     '|': _LINE_DIR_V, '^': _LINE_DIR_V, 'v': _LINE_DIR_V,
     '/': _LINE_DIR_D,
@@ -181,15 +231,16 @@ const _LINE_CHAR_DIRS = {
     '+': _LINE_DIR_H | _LINE_DIR_V,
     'X': _LINE_DIR_D | _LINE_DIR_B,
     '*': _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B,
-    // Unicode box-drawing (from box/card/table/modal components)
-    '─': _LINE_DIR_H, '━': _LINE_DIR_H, '═': _LINE_DIR_H,
-    '│': _LINE_DIR_V, '┃': _LINE_DIR_V, '║': _LINE_DIR_V,
-    '┼': _LINE_DIR_H | _LINE_DIR_V,
-    '╋': _LINE_DIR_H | _LINE_DIR_V,
-    '╬': _LINE_DIR_H | _LINE_DIR_V,
+    [_PUA_HD]:  _LINE_DIR_H | _LINE_DIR_D,
+    [_PUA_HB]:  _LINE_DIR_H | _LINE_DIR_B,
+    [_PUA_VD]:  _LINE_DIR_V | _LINE_DIR_D,
+    [_PUA_VB]:  _LINE_DIR_V | _LINE_DIR_B,
+    [_PUA_HVD]: _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D,
+    [_PUA_HVB]: _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B,
+    [_PUA_HDB]: _LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B,
+    [_PUA_VDB]: _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B,
 };
 
-// Map combined direction flags → result character
 const _DIR_RESULT = {
     [_LINE_DIR_H]: '-',
     [_LINE_DIR_V]: '|',
@@ -197,26 +248,42 @@ const _DIR_RESULT = {
     [_LINE_DIR_B]: '\\',
     [_LINE_DIR_H | _LINE_DIR_V]: '+',
     [_LINE_DIR_D | _LINE_DIR_B]: 'X',
-    [_LINE_DIR_H | _LINE_DIR_D]: '+',
-    [_LINE_DIR_H | _LINE_DIR_B]: '+',
-    [_LINE_DIR_V | _LINE_DIR_D]: '+',
-    [_LINE_DIR_V | _LINE_DIR_B]: '+',
-    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D]: '*',
-    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B]: '*',
-    [_LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B]: '*',
-    [_LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
+    [_LINE_DIR_H | _LINE_DIR_D]: _PUA_HD,
+    [_LINE_DIR_H | _LINE_DIR_B]: _PUA_HB,
+    [_LINE_DIR_V | _LINE_DIR_D]: _PUA_VD,
+    [_LINE_DIR_V | _LINE_DIR_B]: _PUA_VB,
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D]: _PUA_HVD,
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B]: _PUA_HVB,
+    [_LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B]: _PUA_HDB,
+    [_LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: _PUA_VDB,
     [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
 };
 
+const _PUA_DISPLAY = {
+    [_PUA_HD]: '+', [_PUA_HB]: '+', [_PUA_VD]: '+', [_PUA_VB]: '+',
+    [_PUA_HVD]: '*', [_PUA_HVB]: '*', [_PUA_HDB]: '*', [_PUA_VDB]: '*',
+};
+
 // Merge two characters that overlap on the grid.
-// If both are line/arrow chars, returns the intersection character.
-// Otherwise returns the incoming char (normal overwrite behavior).
+// 1) Box-drawing merge: combines U/D/L/R directions → correct Unicode junction
+// 2) Diagonal merge: combines H/V/D/B for freehand ASCII lines
+// 3) Fallback: incoming overwrites existing
 function mergeLineChars(existing, incoming) {
+    // Try box-drawing merge (corners/tees/crosses)
+    const eDirs = _BOX_DIRS[existing];
+    const iDirs = _BOX_DIRS[incoming];
+    if (eDirs !== undefined && iDirs !== undefined) {
+        const combined = eDirs | iDirs;
+        if (combined === iDirs) return incoming; // incoming already covers all directions
+        const style = _BOX_STYLE[incoming] || 'single';
+        const result = _BOX_RESULTS[style][combined];
+        if (result) return result;
+    }
+
+    // Fall back to diagonal line merge (for /, \, arrows, PUA combos)
     const ed = _LINE_CHAR_DIRS[existing];
     const id = _LINE_CHAR_DIRS[incoming];
-    // Both must be recognized line chars to merge
     if (ed === undefined || id === undefined) return incoming;
-    // Same direction — incoming wins (no intersection)
     if (ed === id) return incoming;
     const combined = ed | id;
     return _DIR_RESULT[combined] || incoming;

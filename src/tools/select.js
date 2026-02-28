@@ -12,6 +12,7 @@ class SelectTool extends BaseTool {
         this._origY = 0;
         this._origW = 0;
         this._origH = 0;
+        this._origPositions = new Map(); // for multi-drag: id → {x, y}
         this._marquee = null;
     }
 
@@ -29,20 +30,20 @@ class SelectTool extends BaseTool {
 
     onMouseDown(col, row, e) {
         const app = this.app;
-        const selected = app.selectedComponent;
 
-        // Check resize handles first
-        if (selected && !selected.locked) {
-            const handleDir = selected.getHandleAt(col, row);
+        // Check resize handles — only when exactly 1 selected
+        const single = app.selectedComponent; // getter: null if != 1
+        if (single && !single.locked) {
+            const handleDir = single.getHandleAt(col, row);
             if (handleDir) {
                 this._resizing = true;
                 this._resizeDir = handleDir;
                 this._startCol = col;
                 this._startRow = row;
-                this._origX = selected.x;
-                this._origY = selected.y;
-                this._origW = selected.w;
-                this._origH = selected.h;
+                this._origX = single.x;
+                this._origY = single.y;
+                this._origW = single.w;
+                this._origH = single.h;
                 app.pushUndo();
                 return;
             }
@@ -50,52 +51,81 @@ class SelectTool extends BaseTool {
 
         // Hit test: find topmost component under cursor
         const hit = app.hitTest(col, row);
+
+        if (hit && e.shiftKey) {
+            // Shift+click: toggle selection
+            app.toggleSelect(hit);
+            // Start dragging if the component is now selected and unlocked
+            if (app.isSelected(hit) && !hit.locked) {
+                this._startMultiDrag(col, row);
+            }
+            return;
+        }
+
         if (hit) {
-            app.selectComponent(hit);
+            // If not already selected, replace selection
+            if (!app.isSelected(hit)) {
+                app.selectComponent(hit);
+            }
             if (!hit.locked) {
-                this._dragging = true;
-                this._startCol = col;
-                this._startRow = row;
-                this._origX = hit.x;
-                this._origY = hit.y;
-                app.pushUndo();
+                this._startMultiDrag(col, row);
             }
         } else {
-            // Start marquee selection
-            app.selectComponent(null);
+            // Click on empty space
+            if (!e.shiftKey) {
+                app.selectComponent(null);
+            }
             this._marquee = { x1: col, y1: row, x2: col, y2: row };
         }
     }
 
+    _startMultiDrag(col, row) {
+        this._dragging = true;
+        this._startCol = col;
+        this._startRow = row;
+        this._origPositions.clear();
+        for (const comp of this.app.getSelectedComponents()) {
+            this._origPositions.set(comp.id, { x: comp.x, y: comp.y });
+        }
+        this.app.pushUndo();
+    }
+
     onMouseMove(col, row, e) {
         const app = this.app;
-        const selected = app.selectedComponent;
 
-        if (this._resizing && selected) {
-            const dx = col - this._startCol;
-            const dy = row - this._startRow;
-            const min = selected.getMinSize();
-            this._applyResize(selected, dx, dy, min);
-            app.render();
+        if (this._resizing) {
+            const single = app.selectedComponent;
+            if (single) {
+                const dx = col - this._startCol;
+                const dy = row - this._startRow;
+                const min = single.getMinSize();
+                this._applyResize(single, dx, dy, min);
+                app.render();
+            }
             return;
         }
 
-        if (this._dragging && selected) {
+        if (this._dragging) {
             const dx = col - this._startCol;
             const dy = row - this._startRow;
-            const newX = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
-            const newY = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
-            // Shift group children by the same delta
-            if (selected.type === 'group' && selected.children) {
-                const shiftX = newX - selected.x;
-                const shiftY = newY - selected.y;
-                for (const child of selected.children) {
-                    child.x += shiftX;
-                    child.y += shiftY;
+            for (const comp of app.getSelectedComponents()) {
+                if (comp.locked) continue;
+                const orig = this._origPositions.get(comp.id);
+                if (!orig) continue;
+                const newX = Math.max(0, Math.min(GRID_COLS - comp.w, orig.x + dx));
+                const newY = Math.max(0, Math.min(GRID_ROWS - comp.h, orig.y + dy));
+                // Shift group children by the same delta
+                if (comp.type === 'group' && comp.children) {
+                    const shiftX = newX - comp.x;
+                    const shiftY = newY - comp.y;
+                    for (const child of comp.children) {
+                        child.x += shiftX;
+                        child.y += shiftY;
+                    }
                 }
+                comp.x = newX;
+                comp.y = newY;
             }
-            selected.x = newX;
-            selected.y = newY;
             app.render();
             return;
         }
@@ -115,18 +145,29 @@ class SelectTool extends BaseTool {
             const mw = Math.abs(this._marquee.x2 - this._marquee.x1);
             const mh = Math.abs(this._marquee.y2 - this._marquee.y1);
             if (mw > 1 || mh > 1) {
-                // Find first component within
-                const hit = this.app.components.slice().reverse().find(c =>
-                    c.visible && c.x >= mx && c.y >= my &&
+                const hits = this.app.components.filter(c =>
+                    c.visible && c.name !== '_freehand' &&
+                    c.x >= mx && c.y >= my &&
                     c.x + c.w <= mx + mw + 1 && c.y + c.h <= my + mh + 1
                 );
-                if (hit) this.app.selectComponent(hit);
+                if (hits.length > 0) {
+                    if (e.shiftKey) {
+                        // Shift+marquee: add to existing selection
+                        for (const h of hits) {
+                            this.app.selectedComponents.add(h.id);
+                        }
+                        this.app._updateSelectionUI();
+                    } else {
+                        this.app.selectMultiple(hits);
+                    }
+                }
             }
             this._marquee = null;
         }
         this._dragging = false;
         this._resizing = false;
         this._resizeDir = null;
+        this._origPositions.clear();
         this.app.render();
     }
 
@@ -165,13 +206,18 @@ class SelectTool extends BaseTool {
 
     getOverlays() {
         const overlays = {};
-        const selected = this.app.selectedComponent;
-        if (selected) {
-            overlays.selection = selected.getBounds();
-            if (!selected.locked) {
-                overlays.handles = selected.getHandles();
+        const selectedComps = this.app.getSelectedComponents();
+
+        if (selectedComps.length > 0) {
+            // Draw selection rect for each selected component
+            overlays.selections = selectedComps.map(c => c.getBounds());
+
+            // Only show resize handles for single selection
+            if (selectedComps.length === 1 && !selectedComps[0].locked) {
+                overlays.handles = selectedComps[0].getHandles();
             }
         }
+
         if (this._marquee) {
             const x = Math.min(this._marquee.x1, this._marquee.x2);
             const y = Math.min(this._marquee.y1, this._marquee.y2);

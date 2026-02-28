@@ -40,6 +40,7 @@ class TabsComponent extends BaseComponent {
     getEditableProps() {
         return [
             ...super.getEditableProps(),
+            { key: 'tabs', label: 'Tabs', type: 'text', propsBased: true },
             { key: 'activeIndex', label: 'Active', type: 'number', propsBased: true },
         ];
     }

@@ -4,7 +4,6 @@ class LayersUI {
     constructor(app) {
         this.app = app;
         this._container = document.getElementById('layers-content');
-        this._checked = new Set();
         this._buildHeader();
     }
 
@@ -17,21 +16,20 @@ class LayersUI {
 
         const mkBtn = document.createElement('button');
         mkBtn.className = 'layer-btn';
-        mkBtn.textContent = 'MkLayer';
-        mkBtn.title = 'Group checked layers';
+        mkBtn.textContent = 'MkGroup';
+        mkBtn.title = 'Group selected layers';
         mkBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
         mkBtn.addEventListener('click', () => {
-            this.app.mkLayer(this._checked);
-            this._checked.clear();
+            this.app.mkGroup(); // uses selectedComponents by default
         });
 
         const deBtn = document.createElement('button');
         deBtn.className = 'layer-btn';
-        deBtn.textContent = 'DeLayer';
+        deBtn.textContent = 'DeGroup';
         deBtn.title = 'Ungroup selected group';
         deBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
         deBtn.addEventListener('click', () => {
-            this.app.deLayer();
+            this.app.deGroup();
         });
 
         btnRow.appendChild(mkBtn);
@@ -66,30 +64,16 @@ class LayersUI {
     }
 
     _buildLayerItem(comp, isChild) {
+        const isSelected = this.app.isSelected(comp);
         const item = document.createElement('div');
-        item.className = 'layer-item' + (this.app.selectedComponent === comp ? ' selected' : '');
+        item.className = 'layer-item' + (isSelected ? ' selected' : '');
 
         if (isChild) {
-            // Indented child row — read-only, no checkbox
+            // Indented child row — read-only
             const indent = document.createElement('span');
             indent.style.cssText = 'color:#6c7086; font-size:10px; width:28px; text-align:right; flex-shrink:0;';
             indent.textContent = '└';
             item.appendChild(indent);
-        } else {
-            // Checkbox for multi-select
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = this._checked.has(comp.id);
-            cb.style.cssText = 'margin:0; flex-shrink:0; cursor:pointer; accent-color:#89b4fa;';
-            cb.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (cb.checked) {
-                    this._checked.add(comp.id);
-                } else {
-                    this._checked.delete(comp.id);
-                }
-            });
-            item.appendChild(cb);
         }
 
         const vis = document.createElement('span');
@@ -155,8 +139,12 @@ class LayersUI {
             actions.appendChild(delBtn);
             item.appendChild(actions);
 
-            item.addEventListener('click', () => {
-                this.app.selectComponent(comp);
+            item.addEventListener('click', (e) => {
+                if (e.shiftKey) {
+                    this.app.toggleSelect(comp);
+                } else {
+                    this.app.selectComponent(comp);
+                }
             });
         }
 

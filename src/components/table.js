@@ -93,6 +93,7 @@ class TableComponent extends BaseComponent {
             ...super.getEditableProps(),
             { key: 'cols', label: 'Cols', type: 'number', propsBased: true },
             { key: 'rows', label: 'Rows', type: 'number', propsBased: true },
+            { key: 'headers', label: 'Headers', type: 'text', propsBased: true },
         ];
     }
 }

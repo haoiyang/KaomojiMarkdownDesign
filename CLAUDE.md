@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-Browser-based ASCII wireframe editor for designing UI mockups using Unicode box-drawing characters. Compiles into a single portable HTML file (99KB) with zero external dependencies. Inspired by [mockdown.design](https://www.mockdown.design/).
+Browser-based ASCII wireframe editor for designing UI mockups using Unicode box-drawing characters. Compiles into a single portable HTML file (150KB) with zero external dependencies. Inspired by [mockdown.design](https://www.mockdown.design/).
 
 `$PROJECT_ROOT` = this directory (`${PYTHON_WS}/KaomojiMarkdownDesign`)
 
@@ -13,7 +13,7 @@ open $PROJECT_ROOT/src/index.html
 
 # Build single-file dist
 bash $PROJECT_ROOT/build.sh
-# Output: $PROJECT_ROOT/dist/kaomoji-markdown-design.html (99KB)
+# Output: $PROJECT_ROOT/dist/kaomoji-markdown-design.html (150KB)
 ```
 
 **Key Files:**
@@ -29,6 +29,7 @@ bash $PROJECT_ROOT/build.sh
 | `src/core/export.js` | `ExportUtils` object: clipboard, file, localStorage I/O |
 | `src/components/base.js` | `BaseComponent` abstract class + `_componentIdCounter` |
 | `src/components/registry.js` | `ComponentRegistry` factory + `ELEMENT_PALETTE` array |
+| `src/components/group.js` | `GroupComponent`: container for MkGroup/DeGroup |
 | `src/components/*.js` | 20 component type files (one class each) |
 | `src/tools/base.js` | `BaseTool` interface class |
 | `src/tools/select.js` | `SelectTool`: click/drag/resize with 8 handles + marquee |
@@ -340,6 +341,37 @@ mouseUp:
   exit all states, render()
 ```
 
+#### 2.4.11 Box-Drawing Character Merge (`mergeLineChars`)
+When two components overlap on the grid, their border characters must merge into correct Unicode junctions instead of one simply overwriting the other.
+
+**4-direction flag system** (`_BD_U=1, _BD_D=2, _BD_L=4, _BD_R=8`):
+Each box-drawing character gets direction flags from `_BD_POS_DIRS`:
+- Corners: `tl→D|R`, `tr→D|L`, `bl→U|R`, `br→U|L`
+- Edges: `t/b/h→L|R`, `l/r/v→U|D`
+- Tees: `tee_down→D|L|R`, `tee_up→U|L|R`, `tee_right→U|D|R`, `tee_left→U|D|L`
+- Cross: `cross→U|D|L|R`
+
+**Lookup tables** built dynamically from `BORDER_CHARS`:
+- `_BOX_DIRS[char] → dirFlags` — direction flags for any box-drawing char (OR'd across all styles)
+- `_BOX_STYLE[char] → styleName` — first style that defines the char
+- `_BOX_RESULTS[style][dirFlags] → char` — result char for given direction combo in given style
+
+**Merge algorithm**:
+```
+mergeLineChars(existing, incoming):
+  1. If both are box-drawing chars (_BOX_DIRS has entries):
+     combined = existingDirs | incomingDirs
+     If combined == incomingDirs: return incoming (already covers all)
+     Look up _BOX_RESULTS[incoming's style][combined]
+     If found: return result
+  2. Else fall back to diagonal line merge (_LINE_CHAR_DIRS):
+     combined = existingLineDirs | incomingLineDirs
+     Return _DIR_RESULT[combined] or incoming
+  3. Default: incoming overwrites existing
+```
+
+**Examples**: `┐(D|L) + ┌(D|R) → ┬(D|L|R)`, `┤(U|D|L) + ├(U|D|R) → ┼(U|D|L|R)`
+
 ### 2.5 Complete Function List
 
 #### `utils/constants.js` — Global Constants (no classes)
@@ -359,6 +391,10 @@ mouseUp:
 - `drawHDivider(chars: string[][], x: int, w: int, row: int, style?: string): void`
 - `drawVDivider(chars: string[][], col: int, y: int, h: int, style?: string): void`
 - `placeText(chars: string[][], x: int, y: int, text: string, maxWidth?: int): void`
+- `_BOX_DIRS: object` — char → direction flags (OR'd across all positions that define it)
+- `_BOX_STYLE: object` — char → first style name that defines it
+- `_BOX_RESULTS: object` — style → { dirFlags → char } lookup
+- `mergeLineChars(existing: string, incoming: string): string` — merge two overlapping chars using 4-direction box merge then diagonal fallback
 
 #### `core/grid.js` — `class CharGrid`
 - `constructor(cols = GRID_COLS, rows = GRID_ROWS)` — creates `this.cells = string[][]`
@@ -427,7 +463,7 @@ Global: `let _componentIdCounter = 0` — auto-increments on each `new BaseCompo
 - `getMinSize(): {minW, minH}` — default `{1, 1}`
 - `serialize(): object` — returns `{type, id, x, y, w, h, zIndex, visible, locked, name, borderStyle, props}`
 - `applyData(data: object): void` — sets all fields from data, syncs `_componentIdCounter`
-- `clone(): BaseComponent` — serialize + bump id + offset (+2, +1) + deserialize
+- `clone(): BaseComponent` — serialize + bump id + offset (+2, +1) + deserialize. Assigns new IDs to group children and offsets their positions
 - `getEditableProps(): PropDef[]` — default: `[x, y, w, h, borderStyle]`
 - `setProp(key, value): void` — sets direct property or `this.props[key]`
 - `getProp(key): any` — gets direct property or `this.props[key]`
@@ -598,7 +634,7 @@ Property change handler: converts boolean strings (`'true'`/`'false'`) for `prop
 - `pushUndo()`: `history.push(components)`
 - `undo()` / `redo()`: `history.undo/redo(components)` → replace `components` → clear selection → update UI
 - `copySelected()`: `_clipboard = selectedComponent.serialize()`
-- `pasteClipboard()`: pushUndo → clone clipboard data with new id (+2/+1 offset) → push → select
+- `pasteClipboard()`: pushUndo → deep clones with new IDs for group children, offsets child positions (+2/+1 offset) → push → select
 - `cutSelected()`: copy + delete
 - `saveToFile()`: `ExportUtils.saveToFile(components)`
 - `loadFromFile()`: `await ExportUtils.loadFromFile()` → pushUndo → replace components → update UI
@@ -1229,6 +1265,7 @@ Manual testing checklist:
 - No `export`/`import` — project uses script concatenation, not modules
 - `ComponentRegistry` referenced before definition — scripts loaded in order via `<script>` tags
 - Fallback `execCommand('copy')` deprecated — intentional for Safari < 13.1 compat
+- `_BOX_DIRS`/`_BOX_STYLE`/`_BOX_RESULTS` built dynamically at load time — intentional global mutation during module init
 
 **Review 1 — Tier Breakdown:**
 
@@ -1264,10 +1301,38 @@ Manual testing checklist:
 
 **Final state confirmation:** No Tier 1 or Tier 2 issues remain.
 
+**Review 2 — Tier Breakdown (box-drawing merge + group paste):**
+
+| Tier | Count | Fixed | False Positive | Accepted |
+|------|-------|-------|----------------|----------|
+| 1 (Critical) | 0 | 0 | 0 | 0 |
+| 2 (High) | 1 | 1 | 0 | 0 |
+| 3 (Medium) | 7 | 0 | 0 | 7 |
+| 4 (Low) | 5 | 0 | 0 | 5 |
+
+**Tier 2 Findings (all fixed):**
+
+| # | File | Finding | Fix |
+|---|------|---------|-----|
+| 2.1 | `app.js:104-109` | Group children drill-down in dblclick missing null/corruption guard on children array | Added `.filter(c => c && typeof c === 'object' && c.contains)` before sort/find |
+
+**Tier 3 Findings (accepted):**
+
+| # | File:Line | Description | Acceptance Rationale |
+|---|-----------|-------------|---------------------|
+| 3.1 | `boxdraw.js:271-290` | Box merge fallback to diagonal if style result undefined | Falls through safely to `return incoming` via diagonal guard |
+| 3.2 | `app.js:365` | _componentIdCounter overflow after billions of pastes | Requires ~9e15 operations; not practical |
+| 3.3 | `boxdraw.js:202-207` | Single-direction fallbacks assume chars.h/v exist | All 5 built-in styles define h/v; undefined result falls through safely |
+| 3.4 | `app.js:370-377` | pasteClipboard doesn't validate child data structure | Malformed data produces "undefined_N" names; doesn't crash |
+| 3.5 | `group.js:66-77` | setProp doesn't clamp children after position shift | Same behavior as non-group components; _blit skips OOB cells |
+| 3.6 | `boxdraw.js:271-290` | Diagonal fallback could merge box chars unexpectedly | Only reached if _BOX_RESULTS lookup fails; returns incoming as safe default |
+| 3.7 | `base.js:115-130` | clone() doesn't update child zIndex values | Children keep original zIndex; only affects ungrouping order |
+
 #### 2.13.3 Review History
 | Date | Scope | Tier 1 | Tier 2 | Tier 3 | Tier 4 | Result |
 |------|-------|--------|--------|--------|--------|--------|
 | 2026-02-27 | All 40 JS files | 0 | 5 (fixed) | 8 (accepted) | 7 (accepted) | Pass — no Tier 1/2 remain |
+| 2026-02-28 | boxdraw.js, base.js, app.js, group.js, grid.js | 0 | 1 (fixed) | 7 (accepted) | 5 (accepted) | Pass — no Tier 1/2 remain |
 
 ### 2.14 Implementation Considerations
 
@@ -1288,6 +1353,7 @@ Manual testing checklist:
 - [x] Phase 5: UI Panels — `eventbus.js`, `toolbar.js`, `palette.js`, `inspector.js`, `layers.js`, `statusbar.js`, `app.js`
 - [x] Phase 6: Features — Undo/redo wiring, keyboard shortcuts, Copy Markdown, Save/Load, copy/paste/cut, inline text editing, auto-save, drag-and-drop
 - [x] Phase 7: Build script (`build.sh`), single-file output (`dist/kaomoji-markdown-design.html` 99KB), `CLAUDE.md`, `README.md`
+- [x] Phase 8: Box-drawing merge system, group paste fix, inline editing for all elements
 
 ---
 
@@ -1300,3 +1366,5 @@ Manual testing checklist:
 | 1.2 | 2026-02-27 | Codex review: 5 Tier 2 fixes | Per Section D: mandatory code review after implementation | Fixed: boxdraw bounds, table col clamp, modal button guard, inline edit double-fire, clipboard deep clone. Sections 2.13.2–2.13.3 updated. |
 | 1.3 | 2026-02-27 | Converted all section 2.8 flowcharts to Mermaid | Per updated B.2: 2.8 must use Mermaid diagrams, not plain-text. 7 diagrams: init flow (flowchart TD), data flow (graph LR), render pipeline (flowchart TD), add component (sequenceDiagram), drag/select state machine (stateDiagram-v2), undo/redo (sequenceDiagram), save/load (flowchart TD), copy markdown (sequenceDiagram) | Section 2.8 fully rewritten |
 | 1.4 | 2026-02-27 | Added missing 2.7.2 UI Layout ASCII diagram | Visual spatial layout was in original plan but lost during CLAUDE.md creation. Added ASCII wireframe with panel dimensions (toolbar 40px, left 160px, canvas flex:1, right 200px, statusbar 24px). Renumbered 2.7.3→HTML Structure, 2.7.4→CSS, 2.7.5→Canvas | Section 2.7 expanded |
+| 1.5 | 2026-02-28 | Box-drawing character merge system | Fix overlapping component borders breaking at junctions | Added 4-direction (U/D/L/R) merge system in boxdraw.js; updated mergeLineChars; added sections 2.4.11, 2.5 entries |
+| 1.6 | 2026-02-28 | Group paste fix + Codex review | Fix group children not getting new IDs/positions on paste; review per Section D | Fixed clone()/pasteClipboard() child ID+position; Tier 2.1 guard fix; sections 2.13.2-2.13.3 updated |

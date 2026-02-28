@@ -37,6 +37,7 @@ class NavBarComponent extends BaseComponent {
         return [
             ...super.getEditableProps(),
             { key: 'logo', label: 'Logo', type: 'text', propsBased: true },
+            { key: 'links', label: 'Links', type: 'text', propsBased: true },
             { key: 'action', label: 'Action', type: 'text', propsBased: true },
         ];
     }

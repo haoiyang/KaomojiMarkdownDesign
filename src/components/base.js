@@ -118,6 +118,14 @@ class BaseComponent {
         data.name = `${this.type}_${data.id}`;
         data.x += 2;
         data.y += 1;
+        if (data.children && Array.isArray(data.children)) {
+            for (const child of data.children) {
+                child.id = ++_componentIdCounter;
+                child.name = `${child.type}_${child.id}`;
+                child.x += 2;
+                child.y += 1;
+            }
+        }
         return ComponentRegistry.deserialize(data);
     }
 

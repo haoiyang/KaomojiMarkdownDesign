@@ -1,5 +1,42 @@
 // === CanvasRenderer: draws CharGrid onto HTML5 Canvas ===
 
+// Box-drawing characters → direction flags (t=top, b=bottom, l=left, r=right)
+// Used to render these chars with canvas lines instead of fillText for seamless connections
+const _CANVAS_BOX_DIRS = {
+    // Single
+    '─': 'lr', '│': 'tb',
+    '┌': 'rb', '┐': 'lb', '└': 'rt', '┘': 'lt',
+    '├': 'trb', '┤': 'tlb', '┬': 'lrb', '┴': 'lrt', '┼': 'tlrb',
+    // Heavy
+    '━': 'lr', '┃': 'tb',
+    '┏': 'rb', '┓': 'lb', '┗': 'rt', '┛': 'lt',
+    '┣': 'trb', '┫': 'tlb', '┳': 'lrb', '┻': 'lrt', '╋': 'tlrb',
+    // Double
+    '═': 'lr', '║': 'tb',
+    '╔': 'rb', '╗': 'lb', '╚': 'rt', '╝': 'lt',
+    '╠': 'trb', '╣': 'tlb', '╦': 'lrb', '╩': 'lrt', '╬': 'tlrb',
+    // Rounded (straight lines, same geometry as single)
+    '╭': 'rb', '╮': 'lb', '╰': 'rt', '╯': 'lt',
+};
+
+const _BOX_HEAVY = new Set('━┃┏┓┗┛┣┫┳┻╋'.split(''));
+const _BOX_DOUBLE = new Set('═║╔╗╚╝╠╣╦╩╬'.split(''));
+
+// Diagonal and intersection characters → flags: f=forward(/), b=back(\), h=horiz, v=vert
+const _CANVAS_DIAG_CHARS = {
+    '/': 'f', '\\': 'b',
+    '+': 'hv', 'X': 'fb', '*': 'hvfb',
+    // PUA chars for unique direction combos (from mergeLineChars)
+    '\uE001': 'hf',    // H|D
+    '\uE002': 'hb',    // H|B
+    '\uE003': 'vf',    // V|D
+    '\uE004': 'vb',    // V|B
+    '\uE005': 'hvf',   // H|V|D
+    '\uE006': 'hvb',   // H|V|B
+    '\uE007': 'hfb',   // H|D|B
+    '\uE008': 'vfb',   // V|D|B
+};
+
 class CanvasRenderer {
     constructor(canvas) {
         this.canvas = canvas;
@@ -87,7 +124,10 @@ class CanvasRenderer {
             for (let c = 0; c < cols; c++) {
                 const ch_ = grid.getChar(c, r);
                 if (ch_ !== ' ') {
-                    ctx.fillText(ch_, c * cw + xPad, r * ch + yPad);
+                    if (!this._drawBoxChar(c, r, ch_)) {
+                        ctx.fillStyle = COLORS.text;
+                        ctx.fillText(ch_, c * cw + xPad, r * ch + yPad);
+                    }
                 }
             }
         }
@@ -98,6 +138,11 @@ class CanvasRenderer {
         }
         if (overlays.selection) {
             this._drawSelection(overlays.selection);
+        }
+        if (overlays.selections) {
+            for (const sel of overlays.selections) {
+                this._drawSelection(sel);
+            }
         }
         if (overlays.handles) {
             for (const h of overlays.handles) {
@@ -113,6 +158,158 @@ class CanvasRenderer {
         if (overlays.linePreview) {
             this._drawLinePreview(overlays.linePreview);
         }
+    }
+
+    // Draw a box-drawing or line character using canvas lines (returns true if handled)
+    _drawBoxChar(col, row, ch_) {
+        const dirs = _CANVAS_BOX_DIRS[ch_];
+        if (dirs) {
+            if (_BOX_DOUBLE.has(ch_)) {
+                this._drawDoubleBox(col, row, ch_);
+            } else {
+                this._drawSingleBox(col, row, dirs, _BOX_HEAVY.has(ch_));
+            }
+            return true;
+        }
+        // Diagonal and intersection characters
+        const diag = _CANVAS_DIAG_CHARS[ch_];
+        if (diag) {
+            this._drawDiagChar(col, row, diag);
+            return true;
+        }
+        return false;
+    }
+
+    // Draw single/heavy/rounded box char with one line per direction
+    _drawSingleBox(col, row, dirs, isHeavy) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const ch = this.charHeight;
+        const x = col * cw;
+        const y = row * ch;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + ch / 2) + 0.5;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = isHeavy ? 2.5 : 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        if (dirs.includes('t')) { ctx.moveTo(cx, y); ctx.lineTo(cx, cy); }
+        if (dirs.includes('b')) { ctx.moveTo(cx, cy); ctx.lineTo(cx, y + ch); }
+        if (dirs.includes('l')) { ctx.moveTo(x, cy); ctx.lineTo(cx, cy); }
+        if (dirs.includes('r')) { ctx.moveTo(cx, cy); ctx.lineTo(x + cw, cy); }
+
+        ctx.stroke();
+    }
+
+    // Draw diagonal / intersection characters with canvas lines
+    _drawDiagChar(col, row, flags) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const ch = this.charHeight;
+        const x = col * cw;
+        const y = row * ch;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + ch / 2) + 0.5;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        if (flags.includes('f')) { ctx.moveTo(x, y + ch); ctx.lineTo(x + cw, y); }
+        if (flags.includes('b')) { ctx.moveTo(x, y); ctx.lineTo(x + cw, y + ch); }
+        if (flags.includes('h')) { ctx.moveTo(x, cy); ctx.lineTo(x + cw, cy); }
+        if (flags.includes('v')) { ctx.moveTo(cx, y); ctx.lineTo(cx, y + ch); }
+
+        ctx.stroke();
+    }
+
+    // Draw double box char with two parallel lines per direction
+    _drawDoubleBox(col, row, ch_) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const chh = this.charHeight;
+        const x = col * cw;
+        const y = row * chh;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + chh / 2) + 0.5;
+        const g = Math.max(2, Math.floor(cw / 6));
+        const r = x + cw;
+        const b = y + chh;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        switch (ch_) {
+            case '═':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                break;
+            case '║':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                break;
+            case '╔':
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx+g, cy+g); ctx.lineTo(cx+g, b);
+                break;
+            case '╗':
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(cx-g, b);
+                break;
+            case '╚':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(r, cy-g);
+                break;
+            case '╝':
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy+g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx+g, cy+g);
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy-g);
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx-g, cy-g);
+                break;
+            case '╠':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(r, cy+g);
+                break;
+            case '╣':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx+g, cy+g);
+                break;
+            case '╦':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(cx+g, b);
+                break;
+            case '╩':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy+g);
+                break;
+            case '╬':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                break;
+        }
+
+        ctx.stroke();
     }
 
     _drawCursor(col, row) {

@@ -268,7 +268,7 @@ body {
 #inline-editor {
     position: absolute;
     display: none;
-    background: transparent;
+    background: #181825;
     border: 1px solid #89b4fa;
     color: #cdd6f4;
     font-family: "Courier New", "Courier", monospace;
@@ -605,18 +605,68 @@ function arrowHeadChar(points, atEnd) {
     return dx > 0 ? '>' : '<';
 }
 
-// === Line Intersection Merging ===
-// Each line character implies directional axes passing through the cell:
-//   H = horizontal, V = vertical, D = forward diagonal (/), B = back diagonal (\)
-// When two line characters occupy the same cell, merge their directions.
+// === Box-Drawing Character Merge (4-direction: U/D/L/R) ===
+// When two box-drawing chars overlap (e.g. adjacent components sharing a border),
+// merge their cardinal directions to produce the correct intersection character
+// (corners → tees, tees → crosses, etc.)
 
+const _BD_U = 1, _BD_D = 2, _BD_L = 4, _BD_R = 8;
+
+// Direction flags for each BORDER_CHARS position
+const _BD_POS_DIRS = {
+    tl: _BD_D | _BD_R,  tr: _BD_D | _BD_L,
+    bl: _BD_U | _BD_R,  br: _BD_U | _BD_L,
+    t: _BD_L | _BD_R,   b: _BD_L | _BD_R,
+    l: _BD_U | _BD_D,   r: _BD_U | _BD_D,
+    h: _BD_L | _BD_R,   v: _BD_U | _BD_D,
+    cross:     _BD_U | _BD_D | _BD_L | _BD_R,
+    tee_down:  _BD_D | _BD_L | _BD_R,
+    tee_up:    _BD_U | _BD_L | _BD_R,
+    tee_right: _BD_U | _BD_D | _BD_R,
+    tee_left:  _BD_U | _BD_D | _BD_L,
+};
+
+// Build lookup tables from BORDER_CHARS
+const _BOX_DIRS = {};      // char → direction flags (OR'd across all positions)
+const _BOX_STYLE = {};     // char → first style name that defines it
+const _BOX_RESULTS = {};   // style → { dirFlags → char }
+
+for (const style of Object.keys(BORDER_CHARS)) {
+    const chars = BORDER_CHARS[style];
+    const resultMap = {};
+    for (const [pos, ch] of Object.entries(chars)) {
+        const dirs = _BD_POS_DIRS[pos];
+        if (dirs === undefined) continue;
+        _BOX_DIRS[ch] = (_BOX_DIRS[ch] || 0) | dirs;
+        if (!_BOX_STYLE[ch]) _BOX_STYLE[ch] = style;
+        resultMap[dirs] = ch;
+    }
+    // Fill single-direction combos (no standard position maps to just U, D, L, or R)
+    resultMap[_BD_L] = resultMap[_BD_L] || chars.h;
+    resultMap[_BD_R] = resultMap[_BD_R] || chars.h;
+    resultMap[_BD_U] = resultMap[_BD_U] || chars.v;
+    resultMap[_BD_D] = resultMap[_BD_D] || chars.v;
+    resultMap[_BD_L | _BD_R] = resultMap[_BD_L | _BD_R] || chars.h;
+    resultMap[_BD_U | _BD_D] = resultMap[_BD_U | _BD_D] || chars.v;
+    _BOX_RESULTS[style] = resultMap;
+}
+
+// === Diagonal Line Intersection Merging (for freehand / line / arrow tool) ===
 const _LINE_DIR_H = 1;
 const _LINE_DIR_V = 2;
 const _LINE_DIR_D = 4;  // /
 const _LINE_DIR_B = 8;  // \
 
+const _PUA_HD  = '\uE001';
+const _PUA_HB  = '\uE002';
+const _PUA_VD  = '\uE003';
+const _PUA_VB  = '\uE004';
+const _PUA_HVD = '\uE005';
+const _PUA_HVB = '\uE006';
+const _PUA_HDB = '\uE007';
+const _PUA_VDB = '\uE008';
+
 const _LINE_CHAR_DIRS = {
-    // ASCII line chars (from line/arrow components)
     '-': _LINE_DIR_H, '>': _LINE_DIR_H, '<': _LINE_DIR_H,
     '|': _LINE_DIR_V, '^': _LINE_DIR_V, 'v': _LINE_DIR_V,
     '/': _LINE_DIR_D,
@@ -624,15 +674,16 @@ const _LINE_CHAR_DIRS = {
     '+': _LINE_DIR_H | _LINE_DIR_V,
     'X': _LINE_DIR_D | _LINE_DIR_B,
     '*': _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B,
-    // Unicode box-drawing (from box/card/table/modal components)
-    '─': _LINE_DIR_H, '━': _LINE_DIR_H, '═': _LINE_DIR_H,
-    '│': _LINE_DIR_V, '┃': _LINE_DIR_V, '║': _LINE_DIR_V,
-    '┼': _LINE_DIR_H | _LINE_DIR_V,
-    '╋': _LINE_DIR_H | _LINE_DIR_V,
-    '╬': _LINE_DIR_H | _LINE_DIR_V,
+    [_PUA_HD]:  _LINE_DIR_H | _LINE_DIR_D,
+    [_PUA_HB]:  _LINE_DIR_H | _LINE_DIR_B,
+    [_PUA_VD]:  _LINE_DIR_V | _LINE_DIR_D,
+    [_PUA_VB]:  _LINE_DIR_V | _LINE_DIR_B,
+    [_PUA_HVD]: _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D,
+    [_PUA_HVB]: _LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B,
+    [_PUA_HDB]: _LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B,
+    [_PUA_VDB]: _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B,
 };
 
-// Map combined direction flags → result character
 const _DIR_RESULT = {
     [_LINE_DIR_H]: '-',
     [_LINE_DIR_V]: '|',
@@ -640,26 +691,42 @@ const _DIR_RESULT = {
     [_LINE_DIR_B]: '\\',
     [_LINE_DIR_H | _LINE_DIR_V]: '+',
     [_LINE_DIR_D | _LINE_DIR_B]: 'X',
-    [_LINE_DIR_H | _LINE_DIR_D]: '+',
-    [_LINE_DIR_H | _LINE_DIR_B]: '+',
-    [_LINE_DIR_V | _LINE_DIR_D]: '+',
-    [_LINE_DIR_V | _LINE_DIR_B]: '+',
-    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D]: '*',
-    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B]: '*',
-    [_LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B]: '*',
-    [_LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
+    [_LINE_DIR_H | _LINE_DIR_D]: _PUA_HD,
+    [_LINE_DIR_H | _LINE_DIR_B]: _PUA_HB,
+    [_LINE_DIR_V | _LINE_DIR_D]: _PUA_VD,
+    [_LINE_DIR_V | _LINE_DIR_B]: _PUA_VB,
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D]: _PUA_HVD,
+    [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_B]: _PUA_HVB,
+    [_LINE_DIR_H | _LINE_DIR_D | _LINE_DIR_B]: _PUA_HDB,
+    [_LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: _PUA_VDB,
     [_LINE_DIR_H | _LINE_DIR_V | _LINE_DIR_D | _LINE_DIR_B]: '*',
 };
 
+const _PUA_DISPLAY = {
+    [_PUA_HD]: '+', [_PUA_HB]: '+', [_PUA_VD]: '+', [_PUA_VB]: '+',
+    [_PUA_HVD]: '*', [_PUA_HVB]: '*', [_PUA_HDB]: '*', [_PUA_VDB]: '*',
+};
+
 // Merge two characters that overlap on the grid.
-// If both are line/arrow chars, returns the intersection character.
-// Otherwise returns the incoming char (normal overwrite behavior).
+// 1) Box-drawing merge: combines U/D/L/R directions → correct Unicode junction
+// 2) Diagonal merge: combines H/V/D/B for freehand ASCII lines
+// 3) Fallback: incoming overwrites existing
 function mergeLineChars(existing, incoming) {
+    // Try box-drawing merge (corners/tees/crosses)
+    const eDirs = _BOX_DIRS[existing];
+    const iDirs = _BOX_DIRS[incoming];
+    if (eDirs !== undefined && iDirs !== undefined) {
+        const combined = eDirs | iDirs;
+        if (combined === iDirs) return incoming; // incoming already covers all directions
+        const style = _BOX_STYLE[incoming] || 'single';
+        const result = _BOX_RESULTS[style][combined];
+        if (result) return result;
+    }
+
+    // Fall back to diagonal line merge (for /, \, arrows, PUA combos)
     const ed = _LINE_CHAR_DIRS[existing];
     const id = _LINE_CHAR_DIRS[incoming];
-    // Both must be recognized line chars to merge
     if (ed === undefined || id === undefined) return incoming;
-    // Same direction — incoming wins (no intersection)
     if (ed === id) return incoming;
     const combined = ed | id;
     return _DIR_RESULT[combined] || incoming;
@@ -749,9 +816,11 @@ class CharGrid {
         }
     }
 
-    // Export as plain text string
+    // Export as plain text string (replaces internal PUA chars with display equivalents)
     toText() {
-        return this.cells.map(row => row.join('').trimEnd()).join('\n');
+        return this.cells.map(row =>
+            row.map(ch => _PUA_DISPLAY[ch] || ch).join('').trimEnd()
+        ).join('\n');
     }
 
     // Export as markdown code block
@@ -779,6 +848,43 @@ class CharGrid {
 
 // --- core/renderer.js ---
 // === CanvasRenderer: draws CharGrid onto HTML5 Canvas ===
+
+// Box-drawing characters → direction flags (t=top, b=bottom, l=left, r=right)
+// Used to render these chars with canvas lines instead of fillText for seamless connections
+const _CANVAS_BOX_DIRS = {
+    // Single
+    '─': 'lr', '│': 'tb',
+    '┌': 'rb', '┐': 'lb', '└': 'rt', '┘': 'lt',
+    '├': 'trb', '┤': 'tlb', '┬': 'lrb', '┴': 'lrt', '┼': 'tlrb',
+    // Heavy
+    '━': 'lr', '┃': 'tb',
+    '┏': 'rb', '┓': 'lb', '┗': 'rt', '┛': 'lt',
+    '┣': 'trb', '┫': 'tlb', '┳': 'lrb', '┻': 'lrt', '╋': 'tlrb',
+    // Double
+    '═': 'lr', '║': 'tb',
+    '╔': 'rb', '╗': 'lb', '╚': 'rt', '╝': 'lt',
+    '╠': 'trb', '╣': 'tlb', '╦': 'lrb', '╩': 'lrt', '╬': 'tlrb',
+    // Rounded (straight lines, same geometry as single)
+    '╭': 'rb', '╮': 'lb', '╰': 'rt', '╯': 'lt',
+};
+
+const _BOX_HEAVY = new Set('━┃┏┓┗┛┣┫┳┻╋'.split(''));
+const _BOX_DOUBLE = new Set('═║╔╗╚╝╠╣╦╩╬'.split(''));
+
+// Diagonal and intersection characters → flags: f=forward(/), b=back(\), h=horiz, v=vert
+const _CANVAS_DIAG_CHARS = {
+    '/': 'f', '\\': 'b',
+    '+': 'hv', 'X': 'fb', '*': 'hvfb',
+    // PUA chars for unique direction combos (from mergeLineChars)
+    '\uE001': 'hf',    // H|D
+    '\uE002': 'hb',    // H|B
+    '\uE003': 'vf',    // V|D
+    '\uE004': 'vb',    // V|B
+    '\uE005': 'hvf',   // H|V|D
+    '\uE006': 'hvb',   // H|V|B
+    '\uE007': 'hfb',   // H|D|B
+    '\uE008': 'vfb',   // V|D|B
+};
 
 class CanvasRenderer {
     constructor(canvas) {
@@ -867,7 +973,10 @@ class CanvasRenderer {
             for (let c = 0; c < cols; c++) {
                 const ch_ = grid.getChar(c, r);
                 if (ch_ !== ' ') {
-                    ctx.fillText(ch_, c * cw + xPad, r * ch + yPad);
+                    if (!this._drawBoxChar(c, r, ch_)) {
+                        ctx.fillStyle = COLORS.text;
+                        ctx.fillText(ch_, c * cw + xPad, r * ch + yPad);
+                    }
                 }
             }
         }
@@ -878,6 +987,11 @@ class CanvasRenderer {
         }
         if (overlays.selection) {
             this._drawSelection(overlays.selection);
+        }
+        if (overlays.selections) {
+            for (const sel of overlays.selections) {
+                this._drawSelection(sel);
+            }
         }
         if (overlays.handles) {
             for (const h of overlays.handles) {
@@ -893,6 +1007,158 @@ class CanvasRenderer {
         if (overlays.linePreview) {
             this._drawLinePreview(overlays.linePreview);
         }
+    }
+
+    // Draw a box-drawing or line character using canvas lines (returns true if handled)
+    _drawBoxChar(col, row, ch_) {
+        const dirs = _CANVAS_BOX_DIRS[ch_];
+        if (dirs) {
+            if (_BOX_DOUBLE.has(ch_)) {
+                this._drawDoubleBox(col, row, ch_);
+            } else {
+                this._drawSingleBox(col, row, dirs, _BOX_HEAVY.has(ch_));
+            }
+            return true;
+        }
+        // Diagonal and intersection characters
+        const diag = _CANVAS_DIAG_CHARS[ch_];
+        if (diag) {
+            this._drawDiagChar(col, row, diag);
+            return true;
+        }
+        return false;
+    }
+
+    // Draw single/heavy/rounded box char with one line per direction
+    _drawSingleBox(col, row, dirs, isHeavy) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const ch = this.charHeight;
+        const x = col * cw;
+        const y = row * ch;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + ch / 2) + 0.5;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = isHeavy ? 2.5 : 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        if (dirs.includes('t')) { ctx.moveTo(cx, y); ctx.lineTo(cx, cy); }
+        if (dirs.includes('b')) { ctx.moveTo(cx, cy); ctx.lineTo(cx, y + ch); }
+        if (dirs.includes('l')) { ctx.moveTo(x, cy); ctx.lineTo(cx, cy); }
+        if (dirs.includes('r')) { ctx.moveTo(cx, cy); ctx.lineTo(x + cw, cy); }
+
+        ctx.stroke();
+    }
+
+    // Draw diagonal / intersection characters with canvas lines
+    _drawDiagChar(col, row, flags) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const ch = this.charHeight;
+        const x = col * cw;
+        const y = row * ch;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + ch / 2) + 0.5;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        if (flags.includes('f')) { ctx.moveTo(x, y + ch); ctx.lineTo(x + cw, y); }
+        if (flags.includes('b')) { ctx.moveTo(x, y); ctx.lineTo(x + cw, y + ch); }
+        if (flags.includes('h')) { ctx.moveTo(x, cy); ctx.lineTo(x + cw, cy); }
+        if (flags.includes('v')) { ctx.moveTo(cx, y); ctx.lineTo(cx, y + ch); }
+
+        ctx.stroke();
+    }
+
+    // Draw double box char with two parallel lines per direction
+    _drawDoubleBox(col, row, ch_) {
+        const ctx = this.ctx;
+        const cw = this.charWidth;
+        const chh = this.charHeight;
+        const x = col * cw;
+        const y = row * chh;
+        const cx = Math.floor(x + cw / 2) + 0.5;
+        const cy = Math.floor(y + chh / 2) + 0.5;
+        const g = Math.max(2, Math.floor(cw / 6));
+        const r = x + cw;
+        const b = y + chh;
+
+        ctx.strokeStyle = COLORS.text;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'square';
+        ctx.beginPath();
+
+        switch (ch_) {
+            case '═':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                break;
+            case '║':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                break;
+            case '╔':
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx+g, cy+g); ctx.lineTo(cx+g, b);
+                break;
+            case '╗':
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(cx-g, b);
+                break;
+            case '╚':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(r, cy-g);
+                break;
+            case '╝':
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy+g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx+g, cy+g);
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy-g);
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx-g, cy-g);
+                break;
+            case '╠':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(cx-g, cy+g); ctx.lineTo(r, cy+g);
+                break;
+            case '╣':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy-g); ctx.lineTo(cx+g, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(cx+g, cy+g);
+                break;
+            case '╦':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx-g, cy-g); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, cy-g); ctx.lineTo(cx+g, b);
+                break;
+            case '╩':
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, cy+g);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, cy+g);
+                break;
+            case '╬':
+                ctx.moveTo(cx-g, y); ctx.lineTo(cx-g, b);
+                ctx.moveTo(cx+g, y); ctx.lineTo(cx+g, b);
+                ctx.moveTo(x, cy-g); ctx.lineTo(r, cy-g);
+                ctx.moveTo(x, cy+g); ctx.lineTo(r, cy+g);
+                break;
+        }
+
+        ctx.stroke();
     }
 
     _drawCursor(col, row) {
@@ -1266,6 +1532,14 @@ class BaseComponent {
         data.name = `${this.type}_${data.id}`;
         data.x += 2;
         data.y += 1;
+        if (data.children && Array.isArray(data.children)) {
+            for (const child of data.children) {
+                child.id = ++_componentIdCounter;
+                child.name = `${child.type}_${child.id}`;
+                child.x += 2;
+                child.y += 1;
+            }
+        }
         return ComponentRegistry.deserialize(data);
     }
 
@@ -1666,6 +1940,7 @@ class TableComponent extends BaseComponent {
             ...super.getEditableProps(),
             { key: 'cols', label: 'Cols', type: 'number', propsBased: true },
             { key: 'rows', label: 'Rows', type: 'number', propsBased: true },
+            { key: 'headers', label: 'Headers', type: 'text', propsBased: true },
         ];
     }
 }
@@ -1766,6 +2041,7 @@ class TabsComponent extends BaseComponent {
     getEditableProps() {
         return [
             ...super.getEditableProps(),
+            { key: 'tabs', label: 'Tabs', type: 'text', propsBased: true },
             { key: 'activeIndex', label: 'Active', type: 'number', propsBased: true },
         ];
     }
@@ -1811,6 +2087,7 @@ class NavBarComponent extends BaseComponent {
         return [
             ...super.getEditableProps(),
             { key: 'logo', label: 'Logo', type: 'text', propsBased: true },
+            { key: 'links', label: 'Links', type: 'text', propsBased: true },
             { key: 'action', label: 'Action', type: 'text', propsBased: true },
         ];
     }
@@ -2034,6 +2311,7 @@ class BreadcrumbComponent extends BaseComponent {
     getEditableProps() {
         return [
             ...super.getEditableProps(),
+            { key: 'items', label: 'Items', type: 'text', propsBased: true },
         ];
     }
 }
@@ -2174,7 +2452,7 @@ class CircleComponent extends BaseComponent {
 }
 
 // --- components/group.js ---
-// === Group Component: container for grouped components (MkLayer/DeLayer) ===
+// === Group Component: container for grouped components (MkGroup/DeGroup) ===
 
 class GroupComponent extends BaseComponent {
     constructor(x, y, w, h, props = {}) {
@@ -2375,6 +2653,7 @@ class SelectTool extends BaseTool {
         this._origY = 0;
         this._origW = 0;
         this._origH = 0;
+        this._origPositions = new Map(); // for multi-drag: id → {x, y}
         this._marquee = null;
     }
 
@@ -2392,20 +2671,20 @@ class SelectTool extends BaseTool {
 
     onMouseDown(col, row, e) {
         const app = this.app;
-        const selected = app.selectedComponent;
 
-        // Check resize handles first
-        if (selected && !selected.locked) {
-            const handleDir = selected.getHandleAt(col, row);
+        // Check resize handles — only when exactly 1 selected
+        const single = app.selectedComponent; // getter: null if != 1
+        if (single && !single.locked) {
+            const handleDir = single.getHandleAt(col, row);
             if (handleDir) {
                 this._resizing = true;
                 this._resizeDir = handleDir;
                 this._startCol = col;
                 this._startRow = row;
-                this._origX = selected.x;
-                this._origY = selected.y;
-                this._origW = selected.w;
-                this._origH = selected.h;
+                this._origX = single.x;
+                this._origY = single.y;
+                this._origW = single.w;
+                this._origH = single.h;
                 app.pushUndo();
                 return;
             }
@@ -2413,52 +2692,81 @@ class SelectTool extends BaseTool {
 
         // Hit test: find topmost component under cursor
         const hit = app.hitTest(col, row);
+
+        if (hit && e.shiftKey) {
+            // Shift+click: toggle selection
+            app.toggleSelect(hit);
+            // Start dragging if the component is now selected and unlocked
+            if (app.isSelected(hit) && !hit.locked) {
+                this._startMultiDrag(col, row);
+            }
+            return;
+        }
+
         if (hit) {
-            app.selectComponent(hit);
+            // If not already selected, replace selection
+            if (!app.isSelected(hit)) {
+                app.selectComponent(hit);
+            }
             if (!hit.locked) {
-                this._dragging = true;
-                this._startCol = col;
-                this._startRow = row;
-                this._origX = hit.x;
-                this._origY = hit.y;
-                app.pushUndo();
+                this._startMultiDrag(col, row);
             }
         } else {
-            // Start marquee selection
-            app.selectComponent(null);
+            // Click on empty space
+            if (!e.shiftKey) {
+                app.selectComponent(null);
+            }
             this._marquee = { x1: col, y1: row, x2: col, y2: row };
         }
     }
 
+    _startMultiDrag(col, row) {
+        this._dragging = true;
+        this._startCol = col;
+        this._startRow = row;
+        this._origPositions.clear();
+        for (const comp of this.app.getSelectedComponents()) {
+            this._origPositions.set(comp.id, { x: comp.x, y: comp.y });
+        }
+        this.app.pushUndo();
+    }
+
     onMouseMove(col, row, e) {
         const app = this.app;
-        const selected = app.selectedComponent;
 
-        if (this._resizing && selected) {
-            const dx = col - this._startCol;
-            const dy = row - this._startRow;
-            const min = selected.getMinSize();
-            this._applyResize(selected, dx, dy, min);
-            app.render();
+        if (this._resizing) {
+            const single = app.selectedComponent;
+            if (single) {
+                const dx = col - this._startCol;
+                const dy = row - this._startRow;
+                const min = single.getMinSize();
+                this._applyResize(single, dx, dy, min);
+                app.render();
+            }
             return;
         }
 
-        if (this._dragging && selected) {
+        if (this._dragging) {
             const dx = col - this._startCol;
             const dy = row - this._startRow;
-            const newX = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
-            const newY = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
-            // Shift group children by the same delta
-            if (selected.type === 'group' && selected.children) {
-                const shiftX = newX - selected.x;
-                const shiftY = newY - selected.y;
-                for (const child of selected.children) {
-                    child.x += shiftX;
-                    child.y += shiftY;
+            for (const comp of app.getSelectedComponents()) {
+                if (comp.locked) continue;
+                const orig = this._origPositions.get(comp.id);
+                if (!orig) continue;
+                const newX = Math.max(0, Math.min(GRID_COLS - comp.w, orig.x + dx));
+                const newY = Math.max(0, Math.min(GRID_ROWS - comp.h, orig.y + dy));
+                // Shift group children by the same delta
+                if (comp.type === 'group' && comp.children) {
+                    const shiftX = newX - comp.x;
+                    const shiftY = newY - comp.y;
+                    for (const child of comp.children) {
+                        child.x += shiftX;
+                        child.y += shiftY;
+                    }
                 }
+                comp.x = newX;
+                comp.y = newY;
             }
-            selected.x = newX;
-            selected.y = newY;
             app.render();
             return;
         }
@@ -2478,18 +2786,29 @@ class SelectTool extends BaseTool {
             const mw = Math.abs(this._marquee.x2 - this._marquee.x1);
             const mh = Math.abs(this._marquee.y2 - this._marquee.y1);
             if (mw > 1 || mh > 1) {
-                // Find first component within
-                const hit = this.app.components.slice().reverse().find(c =>
-                    c.visible && c.x >= mx && c.y >= my &&
+                const hits = this.app.components.filter(c =>
+                    c.visible && c.name !== '_freehand' &&
+                    c.x >= mx && c.y >= my &&
                     c.x + c.w <= mx + mw + 1 && c.y + c.h <= my + mh + 1
                 );
-                if (hit) this.app.selectComponent(hit);
+                if (hits.length > 0) {
+                    if (e.shiftKey) {
+                        // Shift+marquee: add to existing selection
+                        for (const h of hits) {
+                            this.app.selectedComponents.add(h.id);
+                        }
+                        this.app._updateSelectionUI();
+                    } else {
+                        this.app.selectMultiple(hits);
+                    }
+                }
             }
             this._marquee = null;
         }
         this._dragging = false;
         this._resizing = false;
         this._resizeDir = null;
+        this._origPositions.clear();
         this.app.render();
     }
 
@@ -2528,13 +2847,18 @@ class SelectTool extends BaseTool {
 
     getOverlays() {
         const overlays = {};
-        const selected = this.app.selectedComponent;
-        if (selected) {
-            overlays.selection = selected.getBounds();
-            if (!selected.locked) {
-                overlays.handles = selected.getHandles();
+        const selectedComps = this.app.getSelectedComponents();
+
+        if (selectedComps.length > 0) {
+            // Draw selection rect for each selected component
+            overlays.selections = selectedComps.map(c => c.getBounds());
+
+            // Only show resize handles for single selection
+            if (selectedComps.length === 1 && !selectedComps[0].locked) {
+                overlays.handles = selectedComps[0].getHandles();
             }
         }
+
         if (this._marquee) {
             const x = Math.min(this._marquee.x1, this._marquee.x2);
             const y = Math.min(this._marquee.y1, this._marquee.y2);
@@ -2867,10 +3191,10 @@ class EraserTool extends BaseTool {
                     const idx = this.app.components.indexOf(comp);
                     if (idx >= 0) this.app.components.splice(idx, 1);
                 }
-                if (toDelete.includes(this.app.selectedComponent)) {
-                    this.app.selectedComponent = null;
-                    this.app.inspectorUI.update(null);
+                for (const comp of toDelete) {
+                    this.app.selectedComponents.delete(comp.id);
                 }
+                this.app._updateSelectionUI();
                 this.app.layersUI.update();
                 this.app.statusBarUI.updateCount(
                     this.app.components.filter(c => c.name !== '_freehand').length
@@ -3138,7 +3462,12 @@ class InspectorUI {
     update(component) {
         this._container.innerHTML = '';
         if (!component) {
-            this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>';
+            const count = this.app.selectedComponents.size;
+            if (count > 1) {
+                this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">' + count + ' items selected</div>';
+            } else {
+                this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>';
+            }
             return;
         }
 
@@ -3172,9 +3501,11 @@ class InspectorUI {
                     this.app.render();
                 });
             } else {
-                this._addPropRow(prop.label, prop.key, currentVal, prop.type, (val) => {
+                const displayVal = Array.isArray(currentVal) ? currentVal.join(', ') : currentVal;
+                this._addPropRow(prop.label, prop.key, displayVal, prop.type, (val) => {
                     if (prop.propsBased) {
                         if (prop.type === 'number') val = parseInt(val, 10) || 0;
+                        else if (Array.isArray(component.props[prop.key])) val = val.split(',').map(s => s.trim());
                         component.props[prop.key] = val;
                     } else {
                         component.setProp(prop.key, val);
@@ -3245,7 +3576,6 @@ class LayersUI {
     constructor(app) {
         this.app = app;
         this._container = document.getElementById('layers-content');
-        this._checked = new Set();
         this._buildHeader();
     }
 
@@ -3258,21 +3588,20 @@ class LayersUI {
 
         const mkBtn = document.createElement('button');
         mkBtn.className = 'layer-btn';
-        mkBtn.textContent = 'MkLayer';
-        mkBtn.title = 'Group checked layers';
+        mkBtn.textContent = 'MkGroup';
+        mkBtn.title = 'Group selected layers';
         mkBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
         mkBtn.addEventListener('click', () => {
-            this.app.mkLayer(this._checked);
-            this._checked.clear();
+            this.app.mkGroup(); // uses selectedComponents by default
         });
 
         const deBtn = document.createElement('button');
         deBtn.className = 'layer-btn';
-        deBtn.textContent = 'DeLayer';
+        deBtn.textContent = 'DeGroup';
         deBtn.title = 'Ungroup selected group';
         deBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
         deBtn.addEventListener('click', () => {
-            this.app.deLayer();
+            this.app.deGroup();
         });
 
         btnRow.appendChild(mkBtn);
@@ -3307,30 +3636,16 @@ class LayersUI {
     }
 
     _buildLayerItem(comp, isChild) {
+        const isSelected = this.app.isSelected(comp);
         const item = document.createElement('div');
-        item.className = 'layer-item' + (this.app.selectedComponent === comp ? ' selected' : '');
+        item.className = 'layer-item' + (isSelected ? ' selected' : '');
 
         if (isChild) {
-            // Indented child row — read-only, no checkbox
+            // Indented child row — read-only
             const indent = document.createElement('span');
             indent.style.cssText = 'color:#6c7086; font-size:10px; width:28px; text-align:right; flex-shrink:0;';
             indent.textContent = '└';
             item.appendChild(indent);
-        } else {
-            // Checkbox for multi-select
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.checked = this._checked.has(comp.id);
-            cb.style.cssText = 'margin:0; flex-shrink:0; cursor:pointer; accent-color:#89b4fa;';
-            cb.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (cb.checked) {
-                    this._checked.add(comp.id);
-                } else {
-                    this._checked.delete(comp.id);
-                }
-            });
-            item.appendChild(cb);
         }
 
         const vis = document.createElement('span');
@@ -3396,8 +3711,12 @@ class LayersUI {
             actions.appendChild(delBtn);
             item.appendChild(actions);
 
-            item.addEventListener('click', () => {
-                this.app.selectComponent(comp);
+            item.addEventListener('click', (e) => {
+                if (e.shiftKey) {
+                    this.app.toggleSelect(comp);
+                } else {
+                    this.app.selectComponent(comp);
+                }
             });
         }
 
@@ -3497,7 +3816,7 @@ class App {
         this.renderer = new CanvasRenderer(this.canvas);
         this.history = new UndoManager();
         this.components = [];
-        this.selectedComponent = null;
+        this.selectedComponents = new Set(); // stores component IDs
         this.currentToolId = 'select';
         this._cursorCol = 0;
         this._cursorRow = 0;
@@ -3588,13 +3907,19 @@ class App {
             const px = e.clientX - rect.left;
             const py = e.clientY - rect.top;
             const { col, row } = this.renderer.pixelToGrid(px, py);
-            const hit = this.hitTest(col, row);
-            if (hit && hit.props.text !== undefined) {
-                this._startInlineEdit(hit, px, py);
-            } else if (hit && hit.props.label !== undefined) {
-                this._startInlineEdit(hit, px, py, 'label');
-            } else if (hit && hit.props.title !== undefined) {
-                this._startInlineEdit(hit, px, py, 'title');
+            let hit = this.hitTest(col, row);
+            // Drill into group to find the actual child at (col, row)
+            if (hit && hit.type === 'group' && hit.children) {
+                const child = [...hit.children]
+                    .filter(c => c && typeof c === 'object' && c.contains)
+                    .sort((a, b) => b.zIndex - a.zIndex)
+                    .find(c => c.contains(col, row));
+                if (child) hit = child;
+            }
+            if (!hit) return;
+            const info = this._getInlineEditInfo(hit, col, row);
+            if (info) {
+                this._startInlineEdit(hit, px, py, info.propKey, info.editBounds || null, info.onSave || null);
             }
         });
 
@@ -3663,11 +3988,11 @@ class App {
             case 'redo': this.redo(); break;
             case 'delete': this.deleteSelected(); break;
             case 'deselect': this.selectComponent(null); break;
-            case 'selectAll':
-                if (this.components.length > 0) {
-                    this.selectComponent(this.components[this.components.length - 1]);
-                }
+            case 'selectAll': {
+                const all = this.components.filter(c => c.name !== '_freehand' && c.visible);
+                if (all.length > 0) this.selectMultiple(all);
                 break;
+            }
             case 'copy': this.copySelected(); break;
             case 'paste': this.pasteClipboard(); break;
             case 'cut': this.cutSelected(); break;
@@ -3713,9 +4038,50 @@ class App {
         this.addComponentAt(type, col, row);
     }
 
+    // === Selection Management ===
+
+    get selectedComponent() {
+        if (this.selectedComponents.size === 1) {
+            const id = this.selectedComponents.values().next().value;
+            return this.components.find(c => c.id === id) || null;
+        }
+        return null;
+    }
+
+    isSelected(comp) {
+        return this.selectedComponents.has(comp.id);
+    }
+
+    getSelectedComponents() {
+        return this.components.filter(c => this.selectedComponents.has(c.id));
+    }
+
     selectComponent(comp) {
-        this.selectedComponent = comp;
+        this.selectedComponents.clear();
+        if (comp) this.selectedComponents.add(comp.id);
         this.inspectorUI.update(comp);
+        this.layersUI.update();
+        this.render();
+    }
+
+    toggleSelect(comp) {
+        if (this.selectedComponents.has(comp.id)) {
+            this.selectedComponents.delete(comp.id);
+        } else {
+            this.selectedComponents.add(comp.id);
+        }
+        this._updateSelectionUI();
+    }
+
+    selectMultiple(comps) {
+        this.selectedComponents.clear();
+        for (const c of comps) this.selectedComponents.add(c.id);
+        this._updateSelectionUI();
+    }
+
+    _updateSelectionUI() {
+        const single = this.selectedComponent; // uses getter
+        this.inspectorUI.update(single);
         this.layersUI.update();
         this.render();
     }
@@ -3725,21 +4091,25 @@ class App {
         const idx = this.components.indexOf(comp);
         if (idx >= 0) {
             this.components.splice(idx, 1);
-            if (this.selectedComponent === comp) {
-                this.selectedComponent = null;
-                this.inspectorUI.update(null);
-            }
-            this.layersUI.update();
+            this.selectedComponents.delete(comp.id);
+            this._updateSelectionUI();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
-            this.render();
             this._toast('Deleted component');
         }
     }
 
     deleteSelected() {
-        if (this.selectedComponent && !this.selectedComponent.locked) {
-            this.deleteComponent(this.selectedComponent);
+        const toDelete = this.getSelectedComponents().filter(c => !c.locked);
+        if (toDelete.length === 0) return;
+        this.pushUndo();
+        for (const comp of toDelete) {
+            const idx = this.components.indexOf(comp);
+            if (idx >= 0) this.components.splice(idx, 1);
+            this.selectedComponents.delete(comp.id);
         }
+        this._updateSelectionUI();
+        this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+        this._toast(`Deleted ${toDelete.length} component${toDelete.length > 1 ? 's' : ''}`);
     }
 
     hitTest(col, row) {
@@ -3763,7 +4133,7 @@ class App {
         const restored = this.history.undo(this.components);
         if (restored) {
             this.components = restored;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -3776,7 +4146,7 @@ class App {
         const restored = this.history.redo(this.components);
         if (restored) {
             this.components = restored;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -3788,31 +4158,45 @@ class App {
     // === Copy / Paste ===
 
     copySelected() {
-        if (this.selectedComponent) {
-            this._clipboard = this.selectedComponent.serialize();
+        const selected = this.getSelectedComponents();
+        if (selected.length > 0) {
+            this._clipboard = selected.map(c => c.serialize());
             this._toast('Copied');
         }
     }
 
     pasteClipboard() {
-        if (this._clipboard) {
+        if (this._clipboard && this._clipboard.length > 0) {
             this.pushUndo();
-            const data = JSON.parse(JSON.stringify(this._clipboard));
-            data.id = ++_componentIdCounter;
-            data.name = `${data.type}_${data.id}`;
-            data.x += 2;
-            data.y += 1;
-            const comp = ComponentRegistry.deserialize(data);
-            comp.zIndex = this.components.length;
-            this.components.push(comp);
-            this.selectComponent(comp);
-            this.render();
+            const pasted = [];
+            for (const orig of this._clipboard) {
+                const data = JSON.parse(JSON.stringify(orig));
+                data.id = ++_componentIdCounter;
+                data.name = `${data.type}_${data.id}`;
+                data.x += 2;
+                data.y += 1;
+                // Offset group children positions and assign new IDs
+                if (data.children && Array.isArray(data.children)) {
+                    for (const child of data.children) {
+                        child.id = ++_componentIdCounter;
+                        child.name = `${child.type}_${child.id}`;
+                        child.x += 2;
+                        child.y += 1;
+                    }
+                }
+                const comp = ComponentRegistry.deserialize(data);
+                comp.zIndex = this.components.length;
+                this.components.push(comp);
+                pasted.push(comp);
+            }
+            this.selectMultiple(pasted);
             this._toast('Pasted');
         }
     }
 
     cutSelected() {
-        if (this.selectedComponent) {
+        const selected = this.getSelectedComponents();
+        if (selected.length > 0) {
             this.copySelected();
             this.deleteSelected();
             this._toast('Cut');
@@ -3820,6 +4204,7 @@ class App {
     }
 
     rotateSelected() {
+        if (this.selectedComponents.size !== 1) return;
         const comp = this.selectedComponent;
         if (!comp || comp.locked) return;
         this.pushUndo();
@@ -3848,10 +4233,11 @@ class App {
 
     // === Group / Ungroup ===
 
-    mkLayer(checkedIds) {
-        const targets = this.components.filter(c => checkedIds.has(c.id) && c.name !== '_freehand');
+    mkGroup(checkedIds = null) {
+        const ids = checkedIds || this.selectedComponents;
+        const targets = this.components.filter(c => ids.has(c.id) && c.name !== '_freehand');
         if (targets.length < 2) {
-            this._toast('Check at least 2 layers to group');
+            this._toast('Select at least 2 components to group');
             return;
         }
         this.pushUndo();
@@ -3871,15 +4257,15 @@ class App {
         group.children = targets;
 
         // Remove children from top-level components
-        this.components = this.components.filter(c => !checkedIds.has(c.id));
+        this.components = this.components.filter(c => !ids.has(c.id));
         group.zIndex = this.components.length;
         this.components.push(group);
         this.selectComponent(group);
         this.render();
-        this._toast('Grouped ' + targets.length + ' layers');
+        this._toast('Grouped ' + targets.length + ' components');
     }
 
-    deLayer() {
+    deGroup() {
         const sel = this.selectedComponent;
         if (!sel || sel.type !== 'group') {
             this._toast('Select a group to ungroup');
@@ -3896,12 +4282,12 @@ class App {
             this.components.push(child);
         }
 
-        this.selectedComponent = null;
+        this.selectedComponents.clear();
         this.inspectorUI.update(null);
         this.layersUI.update();
         this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
         this.render();
-        this._toast('Ungrouped ' + children.length + ' layers');
+        this._toast('Ungrouped ' + children.length + ' components');
     }
 
     // === File Operations ===
@@ -3916,7 +4302,7 @@ class App {
             const components = await ExportUtils.loadFromFile();
             this.pushUndo();
             this.components = components;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -3931,7 +4317,7 @@ class App {
         if (this.components.length > 0 && !confirm('Clear canvas? Unsaved changes will be lost.')) return;
         this.pushUndo();
         this.components = [];
-        this.selectedComponent = null;
+        this.selectedComponents.clear();
         this.inspectorUI.update(null);
         this.layersUI.update();
         this.statusBarUI.updateCount(0);
@@ -3976,24 +4362,217 @@ class App {
 
     // === Inline Text Editing ===
 
-    _startInlineEdit(comp, px, py, propKey = 'text') {
+    _getInlineEditInfo(comp, col, row) {
+        switch (comp.type) {
+            case 'textbox':
+                return { propKey: 'text' };
+
+            case 'button':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 2, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'input':
+                return {
+                    propKey: 'placeholder',
+                    editBounds: { x: comp.x + 1, y: comp.y, w: Math.max(1, comp.w - 2), h: 1 },
+                };
+
+            case 'card':
+                return {
+                    propKey: 'title',
+                    editBounds: { x: comp.x + 2, y: comp.y + 1, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'modal':
+                return {
+                    propKey: 'title',
+                    editBounds: { x: comp.x + 2, y: comp.y + 1, w: Math.max(1, comp.w - 6), h: 1 },
+                };
+
+            case 'table': {
+                const numCols = Math.min(comp.props.cols, Math.max(1, Math.floor((comp.w - 1) / 3)));
+                const colWidth = Math.floor((comp.w - 1) / numCols);
+                const localCol = col - comp.x;
+                const colIdx = Math.min(numCols - 1, Math.max(0, Math.floor(localCol / colWidth)));
+                const headers = comp.props.headers || [];
+                return {
+                    propKey: 'headers',
+                    editBounds: {
+                        x: comp.x + colIdx * colWidth + 1,
+                        y: comp.y + 1,
+                        w: Math.max(1, colWidth - 1),
+                        h: 1,
+                    },
+                    onSave: {
+                        initValue: headers[colIdx] || '',
+                        save: (val) => { headers[colIdx] = val; comp.props.headers = [...headers]; },
+                    },
+                };
+            }
+
+            case 'tabs': {
+                const tabs = comp.props.tabs || [];
+                const activeIdx = comp.props.activeIndex || 0;
+                let cx = 0;
+                const localCol = col - comp.x;
+                for (let i = 0; i < tabs.length; i++) {
+                    const label = tabs[i];
+                    const isActive = (i === activeIdx);
+                    const tabWidth = isActive ? label.length + 2 : label.length;
+                    if (localCol >= cx && localCol < cx + tabWidth + 1) {
+                        const textStart = isActive ? cx + 1 : cx;
+                        return {
+                            propKey: 'tabs',
+                            editBounds: {
+                                x: comp.x + textStart,
+                                y: comp.y,
+                                w: Math.max(1, label.length),
+                                h: 1,
+                            },
+                            onSave: {
+                                initValue: label,
+                                save: (val) => { tabs[i] = val; comp.props.tabs = [...tabs]; },
+                            },
+                        };
+                    }
+                    cx += tabWidth + 1;
+                }
+                return null;
+            }
+
+            case 'navbar': {
+                const localCol = col - comp.x;
+                const logo = comp.props.logo || '';
+                const links = comp.props.links || [];
+                const action = comp.props.action || '';
+
+                // Logo region
+                if (localCol < logo.length + 2) {
+                    return {
+                        propKey: 'logo',
+                        editBounds: { x: comp.x, y: comp.y, w: Math.max(1, logo.length), h: 1 },
+                        onSave: {
+                            initValue: logo,
+                            save: (val) => { comp.props.logo = val; },
+                        },
+                    };
+                }
+
+                // Action region (right-aligned)
+                const actionText = action ? `[${action}]` : '';
+                const actionStart = comp.w - actionText.length;
+                if (actionText && localCol >= actionStart) {
+                    return {
+                        propKey: 'action',
+                        editBounds: { x: comp.x + actionStart + 1, y: comp.y, w: Math.max(1, action.length), h: 1 },
+                        onSave: {
+                            initValue: action,
+                            save: (val) => { comp.props.action = val; },
+                        },
+                    };
+                }
+
+                // Links region
+                let linkCol = logo.length + 2;
+                for (let i = 0; i < links.length; i++) {
+                    const link = links[i];
+                    if (localCol >= linkCol && localCol < linkCol + link.length + 2) {
+                        return {
+                            propKey: 'links',
+                            editBounds: { x: comp.x + linkCol, y: comp.y, w: Math.max(1, link.length), h: 1 },
+                            onSave: {
+                                initValue: link,
+                                save: (val) => { links[i] = val; comp.props.links = [...links]; },
+                            },
+                        };
+                    }
+                    linkCol += link.length + 2;
+                }
+                return null;
+            }
+
+            case 'dropdown':
+                return {
+                    propKey: 'value',
+                    editBounds: { x: comp.x + 1, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'search':
+                return {
+                    propKey: 'placeholder',
+                    editBounds: { x: comp.x + 3, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'checkbox':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 4, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'radio':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 4, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'toggle': {
+                const prefixLen = comp.props.on ? 8 : 9; // '[━●] On ' or '[●━] Off '
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + prefixLen, y: comp.y, w: Math.max(1, comp.w - prefixLen), h: 1 },
+                };
+            }
+
+            case 'breadcrumb':
+                return {
+                    propKey: 'items',
+                    onSave: {
+                        initValue: (comp.props.items || []).join(', '),
+                        save: (val) => { comp.props.items = val.split(',').map(s => s.trim()).filter(s => s); },
+                    },
+                };
+
+            default:
+                return null;
+        }
+    }
+
+    _startInlineEdit(comp, px, py, propKey = 'text', editBounds = null, onSave = null) {
         const editor = document.getElementById('inline-editor');
         const canvasArea = document.getElementById('canvas-area');
         const canvasRect = this.canvas.getBoundingClientRect();
         const areaRect = canvasArea.getBoundingClientRect();
 
-        const x = comp.x * this.renderer.charWidth + (canvasRect.left - areaRect.left) + canvasArea.scrollLeft;
-        const y = comp.y * this.renderer.charHeight + (canvasRect.top - areaRect.top) + canvasArea.scrollTop;
+        const bx = editBounds ? editBounds.x : comp.x;
+        const by = editBounds ? editBounds.y : comp.y;
+        const bw = editBounds ? editBounds.w : comp.w;
+        const bh = editBounds ? editBounds.h : comp.h;
+
+        const x = bx * this.renderer.charWidth + (canvasRect.left - areaRect.left) + canvasArea.scrollLeft;
+        const y = by * this.renderer.charHeight + (canvasRect.top - areaRect.top) + canvasArea.scrollTop;
 
         editor.style.display = 'block';
         editor.style.left = x + 'px';
         editor.style.top = y + 'px';
-        editor.style.width = (comp.w * this.renderer.charWidth) + 'px';
-        editor.style.height = (comp.h * this.renderer.charHeight) + 'px';
+        editor.style.width = (bw * this.renderer.charWidth) + 'px';
+        editor.style.height = (bh * this.renderer.charHeight) + 'px';
         editor.style.fontSize = this.renderer.fontSize + 'px';
         editor.style.fontFamily = this.renderer.fontFamily;
         editor.style.lineHeight = this.renderer.charHeight + 'px';
-        editor.value = comp.props[propKey] || '';
+        // Match canvas per-cell character spacing
+        const extraSpace = this.renderer.charWidth - this.renderer._fontCharWidth;
+        editor.style.letterSpacing = extraSpace + 'px';
+        editor.style.paddingLeft = Math.floor(extraSpace / 2) + 'px';
+        editor.style.paddingTop = Math.floor((this.renderer.charHeight - this.renderer.fontSize) / 2) + 'px';
+        if (onSave) {
+            editor.value = onSave.initValue;
+        } else {
+            const rawVal = comp.props[propKey];
+            const isArray = Array.isArray(rawVal);
+            editor.value = isArray ? rawVal.join(', ') : (rawVal || '');
+        }
         editor.focus();
         editor.select();
 
@@ -4002,7 +4581,13 @@ class App {
             if (finished) return;
             finished = true;
             this.pushUndo();
-            comp.props[propKey] = editor.value;
+            if (onSave) {
+                onSave.save(editor.value);
+            } else {
+                const rawVal = comp.props[propKey];
+                const isArray = Array.isArray(rawVal);
+                comp.props[propKey] = isArray ? editor.value.split(',').map(s => s.trim()) : editor.value;
+            }
             editor.style.display = 'none';
             editor.removeEventListener('blur', finish);
             editor.removeEventListener('keydown', onKey);

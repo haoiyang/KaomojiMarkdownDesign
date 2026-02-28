@@ -74,10 +74,10 @@ class EraserTool extends BaseTool {
                     const idx = this.app.components.indexOf(comp);
                     if (idx >= 0) this.app.components.splice(idx, 1);
                 }
-                if (toDelete.includes(this.app.selectedComponent)) {
-                    this.app.selectedComponent = null;
-                    this.app.inspectorUI.update(null);
+                for (const comp of toDelete) {
+                    this.app.selectedComponents.delete(comp.id);
                 }
+                this.app._updateSelectionUI();
                 this.app.layersUI.update();
                 this.app.statusBarUI.updateCount(
                     this.app.components.filter(c => c.name !== '_freehand').length

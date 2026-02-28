@@ -68,9 +68,11 @@ class CharGrid {
         }
     }
 
-    // Export as plain text string
+    // Export as plain text string (replaces internal PUA chars with display equivalents)
     toText() {
-        return this.cells.map(row => row.join('').trimEnd()).join('\n');
+        return this.cells.map(row =>
+            row.map(ch => _PUA_DISPLAY[ch] || ch).join('').trimEnd()
+        ).join('\n');
     }
 
     // Export as markdown code block

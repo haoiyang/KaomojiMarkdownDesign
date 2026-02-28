@@ -1,4 +1,4 @@
-// === Group Component: container for grouped components (MkLayer/DeLayer) ===
+// === Group Component: container for grouped components (MkGroup/DeGroup) ===
 
 class GroupComponent extends BaseComponent {
     constructor(x, y, w, h, props = {}) {

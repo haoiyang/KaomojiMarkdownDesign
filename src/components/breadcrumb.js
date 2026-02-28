@@ -20,6 +20,7 @@ class BreadcrumbComponent extends BaseComponent {
     getEditableProps() {
         return [
             ...super.getEditableProps(),
+            { key: 'items', label: 'Items', type: 'text', propsBased: true },
         ];
     }
 }

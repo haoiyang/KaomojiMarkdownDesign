@@ -8,7 +8,7 @@ class App {
         this.renderer = new CanvasRenderer(this.canvas);
         this.history = new UndoManager();
         this.components = [];
-        this.selectedComponent = null;
+        this.selectedComponents = new Set(); // stores component IDs
         this.currentToolId = 'select';
         this._cursorCol = 0;
         this._cursorRow = 0;
@@ -99,13 +99,19 @@ class App {
             const px = e.clientX - rect.left;
             const py = e.clientY - rect.top;
             const { col, row } = this.renderer.pixelToGrid(px, py);
-            const hit = this.hitTest(col, row);
-            if (hit && hit.props.text !== undefined) {
-                this._startInlineEdit(hit, px, py);
-            } else if (hit && hit.props.label !== undefined) {
-                this._startInlineEdit(hit, px, py, 'label');
-            } else if (hit && hit.props.title !== undefined) {
-                this._startInlineEdit(hit, px, py, 'title');
+            let hit = this.hitTest(col, row);
+            // Drill into group to find the actual child at (col, row)
+            if (hit && hit.type === 'group' && hit.children) {
+                const child = [...hit.children]
+                    .filter(c => c && typeof c === 'object' && c.contains)
+                    .sort((a, b) => b.zIndex - a.zIndex)
+                    .find(c => c.contains(col, row));
+                if (child) hit = child;
+            }
+            if (!hit) return;
+            const info = this._getInlineEditInfo(hit, col, row);
+            if (info) {
+                this._startInlineEdit(hit, px, py, info.propKey, info.editBounds || null, info.onSave || null);
             }
         });
 
@@ -174,11 +180,11 @@ class App {
             case 'redo': this.redo(); break;
             case 'delete': this.deleteSelected(); break;
             case 'deselect': this.selectComponent(null); break;
-            case 'selectAll':
-                if (this.components.length > 0) {
-                    this.selectComponent(this.components[this.components.length - 1]);
-                }
+            case 'selectAll': {
+                const all = this.components.filter(c => c.name !== '_freehand' && c.visible);
+                if (all.length > 0) this.selectMultiple(all);
                 break;
+            }
             case 'copy': this.copySelected(); break;
             case 'paste': this.pasteClipboard(); break;
             case 'cut': this.cutSelected(); break;
@@ -224,9 +230,50 @@ class App {
         this.addComponentAt(type, col, row);
     }
 
+    // === Selection Management ===
+
+    get selectedComponent() {
+        if (this.selectedComponents.size === 1) {
+            const id = this.selectedComponents.values().next().value;
+            return this.components.find(c => c.id === id) || null;
+        }
+        return null;
+    }
+
+    isSelected(comp) {
+        return this.selectedComponents.has(comp.id);
+    }
+
+    getSelectedComponents() {
+        return this.components.filter(c => this.selectedComponents.has(c.id));
+    }
+
     selectComponent(comp) {
-        this.selectedComponent = comp;
+        this.selectedComponents.clear();
+        if (comp) this.selectedComponents.add(comp.id);
         this.inspectorUI.update(comp);
+        this.layersUI.update();
+        this.render();
+    }
+
+    toggleSelect(comp) {
+        if (this.selectedComponents.has(comp.id)) {
+            this.selectedComponents.delete(comp.id);
+        } else {
+            this.selectedComponents.add(comp.id);
+        }
+        this._updateSelectionUI();
+    }
+
+    selectMultiple(comps) {
+        this.selectedComponents.clear();
+        for (const c of comps) this.selectedComponents.add(c.id);
+        this._updateSelectionUI();
+    }
+
+    _updateSelectionUI() {
+        const single = this.selectedComponent; // uses getter
+        this.inspectorUI.update(single);
         this.layersUI.update();
         this.render();
     }
@@ -236,21 +283,25 @@ class App {
         const idx = this.components.indexOf(comp);
         if (idx >= 0) {
             this.components.splice(idx, 1);
-            if (this.selectedComponent === comp) {
-                this.selectedComponent = null;
-                this.inspectorUI.update(null);
-            }
-            this.layersUI.update();
+            this.selectedComponents.delete(comp.id);
+            this._updateSelectionUI();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
-            this.render();
             this._toast('Deleted component');
         }
     }
 
     deleteSelected() {
-        if (this.selectedComponent && !this.selectedComponent.locked) {
-            this.deleteComponent(this.selectedComponent);
+        const toDelete = this.getSelectedComponents().filter(c => !c.locked);
+        if (toDelete.length === 0) return;
+        this.pushUndo();
+        for (const comp of toDelete) {
+            const idx = this.components.indexOf(comp);
+            if (idx >= 0) this.components.splice(idx, 1);
+            this.selectedComponents.delete(comp.id);
         }
+        this._updateSelectionUI();
+        this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+        this._toast(`Deleted ${toDelete.length} component${toDelete.length > 1 ? 's' : ''}`);
     }
 
     hitTest(col, row) {
@@ -274,7 +325,7 @@ class App {
         const restored = this.history.undo(this.components);
         if (restored) {
             this.components = restored;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -287,7 +338,7 @@ class App {
         const restored = this.history.redo(this.components);
         if (restored) {
             this.components = restored;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -299,31 +350,45 @@ class App {
     // === Copy / Paste ===
 
     copySelected() {
-        if (this.selectedComponent) {
-            this._clipboard = this.selectedComponent.serialize();
+        const selected = this.getSelectedComponents();
+        if (selected.length > 0) {
+            this._clipboard = selected.map(c => c.serialize());
             this._toast('Copied');
         }
     }
 
     pasteClipboard() {
-        if (this._clipboard) {
+        if (this._clipboard && this._clipboard.length > 0) {
             this.pushUndo();
-            const data = JSON.parse(JSON.stringify(this._clipboard));
-            data.id = ++_componentIdCounter;
-            data.name = `${data.type}_${data.id}`;
-            data.x += 2;
-            data.y += 1;
-            const comp = ComponentRegistry.deserialize(data);
-            comp.zIndex = this.components.length;
-            this.components.push(comp);
-            this.selectComponent(comp);
-            this.render();
+            const pasted = [];
+            for (const orig of this._clipboard) {
+                const data = JSON.parse(JSON.stringify(orig));
+                data.id = ++_componentIdCounter;
+                data.name = `${data.type}_${data.id}`;
+                data.x += 2;
+                data.y += 1;
+                // Offset group children positions and assign new IDs
+                if (data.children && Array.isArray(data.children)) {
+                    for (const child of data.children) {
+                        child.id = ++_componentIdCounter;
+                        child.name = `${child.type}_${child.id}`;
+                        child.x += 2;
+                        child.y += 1;
+                    }
+                }
+                const comp = ComponentRegistry.deserialize(data);
+                comp.zIndex = this.components.length;
+                this.components.push(comp);
+                pasted.push(comp);
+            }
+            this.selectMultiple(pasted);
             this._toast('Pasted');
         }
     }
 
     cutSelected() {
-        if (this.selectedComponent) {
+        const selected = this.getSelectedComponents();
+        if (selected.length > 0) {
             this.copySelected();
             this.deleteSelected();
             this._toast('Cut');
@@ -331,6 +396,7 @@ class App {
     }
 
     rotateSelected() {
+        if (this.selectedComponents.size !== 1) return;
         const comp = this.selectedComponent;
         if (!comp || comp.locked) return;
         this.pushUndo();
@@ -359,10 +425,11 @@ class App {
 
     // === Group / Ungroup ===
 
-    mkLayer(checkedIds) {
-        const targets = this.components.filter(c => checkedIds.has(c.id) && c.name !== '_freehand');
+    mkGroup(checkedIds = null) {
+        const ids = checkedIds || this.selectedComponents;
+        const targets = this.components.filter(c => ids.has(c.id) && c.name !== '_freehand');
         if (targets.length < 2) {
-            this._toast('Check at least 2 layers to group');
+            this._toast('Select at least 2 components to group');
             return;
         }
         this.pushUndo();
@@ -382,15 +449,15 @@ class App {
         group.children = targets;
 
         // Remove children from top-level components
-        this.components = this.components.filter(c => !checkedIds.has(c.id));
+        this.components = this.components.filter(c => !ids.has(c.id));
         group.zIndex = this.components.length;
         this.components.push(group);
         this.selectComponent(group);
         this.render();
-        this._toast('Grouped ' + targets.length + ' layers');
+        this._toast('Grouped ' + targets.length + ' components');
     }
 
-    deLayer() {
+    deGroup() {
         const sel = this.selectedComponent;
         if (!sel || sel.type !== 'group') {
             this._toast('Select a group to ungroup');
@@ -407,12 +474,12 @@ class App {
             this.components.push(child);
         }
 
-        this.selectedComponent = null;
+        this.selectedComponents.clear();
         this.inspectorUI.update(null);
         this.layersUI.update();
         this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
         this.render();
-        this._toast('Ungrouped ' + children.length + ' layers');
+        this._toast('Ungrouped ' + children.length + ' components');
     }
 
     // === File Operations ===
@@ -427,7 +494,7 @@ class App {
             const components = await ExportUtils.loadFromFile();
             this.pushUndo();
             this.components = components;
-            this.selectedComponent = null;
+            this.selectedComponents.clear();
             this.inspectorUI.update(null);
             this.layersUI.update();
             this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
@@ -442,7 +509,7 @@ class App {
         if (this.components.length > 0 && !confirm('Clear canvas? Unsaved changes will be lost.')) return;
         this.pushUndo();
         this.components = [];
-        this.selectedComponent = null;
+        this.selectedComponents.clear();
         this.inspectorUI.update(null);
         this.layersUI.update();
         this.statusBarUI.updateCount(0);
@@ -487,24 +554,217 @@ class App {
 
     // === Inline Text Editing ===
 
-    _startInlineEdit(comp, px, py, propKey = 'text') {
+    _getInlineEditInfo(comp, col, row) {
+        switch (comp.type) {
+            case 'textbox':
+                return { propKey: 'text' };
+
+            case 'button':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 2, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'input':
+                return {
+                    propKey: 'placeholder',
+                    editBounds: { x: comp.x + 1, y: comp.y, w: Math.max(1, comp.w - 2), h: 1 },
+                };
+
+            case 'card':
+                return {
+                    propKey: 'title',
+                    editBounds: { x: comp.x + 2, y: comp.y + 1, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'modal':
+                return {
+                    propKey: 'title',
+                    editBounds: { x: comp.x + 2, y: comp.y + 1, w: Math.max(1, comp.w - 6), h: 1 },
+                };
+
+            case 'table': {
+                const numCols = Math.min(comp.props.cols, Math.max(1, Math.floor((comp.w - 1) / 3)));
+                const colWidth = Math.floor((comp.w - 1) / numCols);
+                const localCol = col - comp.x;
+                const colIdx = Math.min(numCols - 1, Math.max(0, Math.floor(localCol / colWidth)));
+                const headers = comp.props.headers || [];
+                return {
+                    propKey: 'headers',
+                    editBounds: {
+                        x: comp.x + colIdx * colWidth + 1,
+                        y: comp.y + 1,
+                        w: Math.max(1, colWidth - 1),
+                        h: 1,
+                    },
+                    onSave: {
+                        initValue: headers[colIdx] || '',
+                        save: (val) => { headers[colIdx] = val; comp.props.headers = [...headers]; },
+                    },
+                };
+            }
+
+            case 'tabs': {
+                const tabs = comp.props.tabs || [];
+                const activeIdx = comp.props.activeIndex || 0;
+                let cx = 0;
+                const localCol = col - comp.x;
+                for (let i = 0; i < tabs.length; i++) {
+                    const label = tabs[i];
+                    const isActive = (i === activeIdx);
+                    const tabWidth = isActive ? label.length + 2 : label.length;
+                    if (localCol >= cx && localCol < cx + tabWidth + 1) {
+                        const textStart = isActive ? cx + 1 : cx;
+                        return {
+                            propKey: 'tabs',
+                            editBounds: {
+                                x: comp.x + textStart,
+                                y: comp.y,
+                                w: Math.max(1, label.length),
+                                h: 1,
+                            },
+                            onSave: {
+                                initValue: label,
+                                save: (val) => { tabs[i] = val; comp.props.tabs = [...tabs]; },
+                            },
+                        };
+                    }
+                    cx += tabWidth + 1;
+                }
+                return null;
+            }
+
+            case 'navbar': {
+                const localCol = col - comp.x;
+                const logo = comp.props.logo || '';
+                const links = comp.props.links || [];
+                const action = comp.props.action || '';
+
+                // Logo region
+                if (localCol < logo.length + 2) {
+                    return {
+                        propKey: 'logo',
+                        editBounds: { x: comp.x, y: comp.y, w: Math.max(1, logo.length), h: 1 },
+                        onSave: {
+                            initValue: logo,
+                            save: (val) => { comp.props.logo = val; },
+                        },
+                    };
+                }
+
+                // Action region (right-aligned)
+                const actionText = action ? `[${action}]` : '';
+                const actionStart = comp.w - actionText.length;
+                if (actionText && localCol >= actionStart) {
+                    return {
+                        propKey: 'action',
+                        editBounds: { x: comp.x + actionStart + 1, y: comp.y, w: Math.max(1, action.length), h: 1 },
+                        onSave: {
+                            initValue: action,
+                            save: (val) => { comp.props.action = val; },
+                        },
+                    };
+                }
+
+                // Links region
+                let linkCol = logo.length + 2;
+                for (let i = 0; i < links.length; i++) {
+                    const link = links[i];
+                    if (localCol >= linkCol && localCol < linkCol + link.length + 2) {
+                        return {
+                            propKey: 'links',
+                            editBounds: { x: comp.x + linkCol, y: comp.y, w: Math.max(1, link.length), h: 1 },
+                            onSave: {
+                                initValue: link,
+                                save: (val) => { links[i] = val; comp.props.links = [...links]; },
+                            },
+                        };
+                    }
+                    linkCol += link.length + 2;
+                }
+                return null;
+            }
+
+            case 'dropdown':
+                return {
+                    propKey: 'value',
+                    editBounds: { x: comp.x + 1, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'search':
+                return {
+                    propKey: 'placeholder',
+                    editBounds: { x: comp.x + 3, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'checkbox':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 4, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'radio':
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + 4, y: comp.y, w: Math.max(1, comp.w - 4), h: 1 },
+                };
+
+            case 'toggle': {
+                const prefixLen = comp.props.on ? 8 : 9; // '[━●] On ' or '[●━] Off '
+                return {
+                    propKey: 'label',
+                    editBounds: { x: comp.x + prefixLen, y: comp.y, w: Math.max(1, comp.w - prefixLen), h: 1 },
+                };
+            }
+
+            case 'breadcrumb':
+                return {
+                    propKey: 'items',
+                    onSave: {
+                        initValue: (comp.props.items || []).join(', '),
+                        save: (val) => { comp.props.items = val.split(',').map(s => s.trim()).filter(s => s); },
+                    },
+                };
+
+            default:
+                return null;
+        }
+    }
+
+    _startInlineEdit(comp, px, py, propKey = 'text', editBounds = null, onSave = null) {
         const editor = document.getElementById('inline-editor');
         const canvasArea = document.getElementById('canvas-area');
         const canvasRect = this.canvas.getBoundingClientRect();
         const areaRect = canvasArea.getBoundingClientRect();
 
-        const x = comp.x * this.renderer.charWidth + (canvasRect.left - areaRect.left) + canvasArea.scrollLeft;
-        const y = comp.y * this.renderer.charHeight + (canvasRect.top - areaRect.top) + canvasArea.scrollTop;
+        const bx = editBounds ? editBounds.x : comp.x;
+        const by = editBounds ? editBounds.y : comp.y;
+        const bw = editBounds ? editBounds.w : comp.w;
+        const bh = editBounds ? editBounds.h : comp.h;
+
+        const x = bx * this.renderer.charWidth + (canvasRect.left - areaRect.left) + canvasArea.scrollLeft;
+        const y = by * this.renderer.charHeight + (canvasRect.top - areaRect.top) + canvasArea.scrollTop;
 
         editor.style.display = 'block';
         editor.style.left = x + 'px';
         editor.style.top = y + 'px';
-        editor.style.width = (comp.w * this.renderer.charWidth) + 'px';
-        editor.style.height = (comp.h * this.renderer.charHeight) + 'px';
+        editor.style.width = (bw * this.renderer.charWidth) + 'px';
+        editor.style.height = (bh * this.renderer.charHeight) + 'px';
         editor.style.fontSize = this.renderer.fontSize + 'px';
         editor.style.fontFamily = this.renderer.fontFamily;
         editor.style.lineHeight = this.renderer.charHeight + 'px';
-        editor.value = comp.props[propKey] || '';
+        // Match canvas per-cell character spacing
+        const extraSpace = this.renderer.charWidth - this.renderer._fontCharWidth;
+        editor.style.letterSpacing = extraSpace + 'px';
+        editor.style.paddingLeft = Math.floor(extraSpace / 2) + 'px';
+        editor.style.paddingTop = Math.floor((this.renderer.charHeight - this.renderer.fontSize) / 2) + 'px';
+        if (onSave) {
+            editor.value = onSave.initValue;
+        } else {
+            const rawVal = comp.props[propKey];
+            const isArray = Array.isArray(rawVal);
+            editor.value = isArray ? rawVal.join(', ') : (rawVal || '');
+        }
         editor.focus();
         editor.select();
 
@@ -513,7 +773,13 @@ class App {
             if (finished) return;
             finished = true;
             this.pushUndo();
-            comp.props[propKey] = editor.value;
+            if (onSave) {
+                onSave.save(editor.value);
+            } else {
+                const rawVal = comp.props[propKey];
+                const isArray = Array.isArray(rawVal);
+                comp.props[propKey] = isArray ? editor.value.split(',').map(s => s.trim()) : editor.value;
+            }
             editor.style.display = 'none';
             editor.removeEventListener('blur', finish);
             editor.removeEventListener('keydown', onKey);

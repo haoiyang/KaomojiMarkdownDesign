@@ -9,7 +9,12 @@ class InspectorUI {
     update(component) {
         this._container.innerHTML = '';
         if (!component) {
-            this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>';
+            const count = this.app.selectedComponents.size;
+            if (count > 1) {
+                this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">' + count + ' items selected</div>';
+            } else {
+                this._container.innerHTML = '<div style="padding: 10px; color: #6c7086; font-size: 11px;">No selection</div>';
+            }
             return;
         }
 
@@ -43,9 +48,11 @@ class InspectorUI {
                     this.app.render();
                 });
             } else {
-                this._addPropRow(prop.label, prop.key, currentVal, prop.type, (val) => {
+                const displayVal = Array.isArray(currentVal) ? currentVal.join(', ') : currentVal;
+                this._addPropRow(prop.label, prop.key, displayVal, prop.type, (val) => {
                     if (prop.propsBased) {
                         if (prop.type === 'number') val = parseInt(val, 10) || 0;
+                        else if (Array.isArray(component.props[prop.key])) val = val.split(',').map(s => s.trim());
                         component.props[prop.key] = val;
                     } else {
                         component.setProp(prop.key, val);
