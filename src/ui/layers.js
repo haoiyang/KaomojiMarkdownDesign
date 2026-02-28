@@ -32,8 +32,18 @@ class LayersUI {
             this.app.deGroup();
         });
 
+        const delBtn = document.createElement('button');
+        delBtn.className = 'layer-btn';
+        delBtn.textContent = 'Delete';
+        delBtn.title = 'Delete selected components';
+        delBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px; color:#f38ba8;';
+        delBtn.addEventListener('click', () => {
+            this.app.deleteSelected();
+        });
+
         btnRow.appendChild(mkBtn);
         btnRow.appendChild(deBtn);
+        btnRow.appendChild(delBtn);
         header.after(btnRow);
     }
 

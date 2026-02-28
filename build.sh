@@ -60,6 +60,7 @@ JS_FILES=(
     "ui/splitter.js"
     "ui/statusbar.js"
     "ui/app.js"
+    "ui/bridge.js"
 )
 
 # Concatenate all JS into a temp file
