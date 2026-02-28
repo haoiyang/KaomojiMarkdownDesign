@@ -58,6 +58,7 @@ ComponentRegistry.register('breadcrumb', BreadcrumbComponent, { w: 24, h: 1, pro
 ComponentRegistry.register('pagination', PaginationComponent, { w: 16, h: 1, props: { pages: 5, current: 1 } });
 ComponentRegistry.register('separator', SeparatorComponent, { w: 20, h: 1, props: {} });
 ComponentRegistry.register('circle', CircleComponent, { w: 12, h: 7, props: {} });
+ComponentRegistry.register('group', GroupComponent, { w: 1, h: 1, props: {} });
 
 // Element palette definitions (for UI)
 const ELEMENT_PALETTE = [

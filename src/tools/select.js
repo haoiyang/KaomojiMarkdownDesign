@@ -83,8 +83,19 @@ class SelectTool extends BaseTool {
         if (this._dragging && selected) {
             const dx = col - this._startCol;
             const dy = row - this._startRow;
-            selected.x = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
-            selected.y = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
+            const newX = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
+            const newY = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
+            // Shift group children by the same delta
+            if (selected.type === 'group' && selected.children) {
+                const shiftX = newX - selected.x;
+                const shiftY = newY - selected.y;
+                for (const child of selected.children) {
+                    child.x += shiftX;
+                    child.y += shiftY;
+                }
+            }
+            selected.x = newX;
+            selected.y = newY;
             app.render();
             return;
         }
@@ -133,6 +144,18 @@ class SelectTool extends BaseTool {
         y = Math.max(0, y);
         if (x + w > GRID_COLS) w = GRID_COLS - x;
         if (y + h > GRID_ROWS) h = GRID_ROWS - y;
+
+        // Shift group children when position changes (n/w resize)
+        if (comp.type === 'group' && comp.children) {
+            const shiftX = x - comp.x;
+            const shiftY = y - comp.y;
+            if (shiftX !== 0 || shiftY !== 0) {
+                for (const child of comp.children) {
+                    child.x += shiftX;
+                    child.y += shiftY;
+                }
+            }
+        }
 
         comp.x = x;
         comp.y = y;

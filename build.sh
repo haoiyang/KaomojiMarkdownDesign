@@ -43,6 +43,7 @@ JS_FILES=(
     "components/pagination.js"
     "components/separator.js"
     "components/circle.js"
+    "components/group.js"
     "components/registry.js"
     "tools/base.js"
     "tools/select.js"

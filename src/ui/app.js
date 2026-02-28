@@ -357,6 +357,64 @@ class App {
         this._toast('Rotated');
     }
 
+    // === Group / Ungroup ===
+
+    mkLayer(checkedIds) {
+        const targets = this.components.filter(c => checkedIds.has(c.id) && c.name !== '_freehand');
+        if (targets.length < 2) {
+            this._toast('Check at least 2 layers to group');
+            return;
+        }
+        this.pushUndo();
+
+        // Compute bounding box
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const c of targets) {
+            minX = Math.min(minX, c.x);
+            minY = Math.min(minY, c.y);
+            maxX = Math.max(maxX, c.x + c.w);
+            maxY = Math.max(maxY, c.y + c.h);
+        }
+
+        const group = ComponentRegistry.create('group', minX, minY);
+        group.w = maxX - minX;
+        group.h = maxY - minY;
+        group.children = targets;
+
+        // Remove children from top-level components
+        this.components = this.components.filter(c => !checkedIds.has(c.id));
+        group.zIndex = this.components.length;
+        this.components.push(group);
+        this.selectComponent(group);
+        this.render();
+        this._toast('Grouped ' + targets.length + ' layers');
+    }
+
+    deLayer() {
+        const sel = this.selectedComponent;
+        if (!sel || sel.type !== 'group') {
+            this._toast('Select a group to ungroup');
+            return;
+        }
+        this.pushUndo();
+
+        const children = sel.children;
+        const idx = this.components.indexOf(sel);
+        if (idx >= 0) this.components.splice(idx, 1);
+
+        for (const child of children) {
+            child.zIndex = this.components.length;
+            this.components.push(child);
+        }
+
+        this.selectedComponent = null;
+        this.inspectorUI.update(null);
+        this.layersUI.update();
+        this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+        this.render();
+        this._toast('Ungrouped ' + children.length + ' layers');
+    }
+
     // === File Operations ===
 
     saveToFile() {
@@ -503,6 +561,8 @@ class App {
     _autoSave() {
         if (this.components.length > 0) {
             ExportUtils.saveToLocalStorage(this.components);
+        } else {
+            localStorage.removeItem('kaomoji_project');
         }
     }
 

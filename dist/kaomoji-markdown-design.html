@@ -2173,6 +2173,86 @@ class CircleComponent extends BaseComponent {
     }
 }
 
+// --- components/group.js ---
+// === Group Component: container for grouped components (MkLayer/DeLayer) ===
+
+class GroupComponent extends BaseComponent {
+    constructor(x, y, w, h, props = {}) {
+        super('group', x, y, w, h, props);
+        this.children = [];
+    }
+
+    render() {
+        const chars = [];
+        for (let r = 0; r < this.h; r++) {
+            chars.push(new Array(this.w).fill(' '));
+        }
+
+        // Sort children by zIndex ascending, composite into local buffer
+        const sorted = [...this.children].sort((a, b) => a.zIndex - b.zIndex);
+        for (const child of sorted) {
+            const rendered = child.render();
+            if (!rendered) continue;
+            const offX = child.x - this.x;
+            const offY = child.y - this.y;
+            for (let r = 0; r < rendered.length; r++) {
+                const localRow = offY + r;
+                if (localRow < 0 || localRow >= this.h) continue;
+                for (let c = 0; c < rendered[r].length; c++) {
+                    const localCol = offX + c;
+                    if (localCol < 0 || localCol >= this.w) continue;
+                    const incoming = rendered[r][c];
+                    if (incoming !== ' ') {
+                        const existing = chars[localRow][localCol];
+                        chars[localRow][localCol] = (existing !== ' ')
+                            ? mergeLineChars(existing, incoming)
+                            : incoming;
+                    }
+                }
+            }
+        }
+        return chars;
+    }
+
+    getMinSize() { return { minW: 1, minH: 1 }; }
+
+    serialize() {
+        const data = super.serialize();
+        data.children = this.children.map(c => c.serialize());
+        return data;
+    }
+
+    applyData(data) {
+        super.applyData(data);
+        if (data.children && Array.isArray(data.children)) {
+            this.children = data.children.map(d => ComponentRegistry.deserialize(d));
+        }
+    }
+
+    getEditableProps() {
+        return [
+            { key: 'x', label: 'X', type: 'number' },
+            { key: 'y', label: 'Y', type: 'number' },
+            { key: 'w', label: 'W', type: 'number' },
+            { key: 'h', label: 'H', type: 'number' },
+        ];
+    }
+
+    // Override setProp to shift children when group position changes
+    setProp(key, value) {
+        if (key === 'x' || key === 'y') {
+            const numVal = parseInt(value, 10) || 0;
+            const delta = numVal - this[key];
+            this[key] = numVal;
+            for (const child of this.children) {
+                child[key] += delta;
+            }
+            return;
+        }
+        super.setProp(key, value);
+    }
+}
+
 // --- components/registry.js ---
 // === Component Registry: factory + deserialization ===
 
@@ -2234,6 +2314,7 @@ ComponentRegistry.register('breadcrumb', BreadcrumbComponent, { w: 24, h: 1, pro
 ComponentRegistry.register('pagination', PaginationComponent, { w: 16, h: 1, props: { pages: 5, current: 1 } });
 ComponentRegistry.register('separator', SeparatorComponent, { w: 20, h: 1, props: {} });
 ComponentRegistry.register('circle', CircleComponent, { w: 12, h: 7, props: {} });
+ComponentRegistry.register('group', GroupComponent, { w: 1, h: 1, props: {} });
 
 // Element palette definitions (for UI)
 const ELEMENT_PALETTE = [
@@ -2365,8 +2446,19 @@ class SelectTool extends BaseTool {
         if (this._dragging && selected) {
             const dx = col - this._startCol;
             const dy = row - this._startRow;
-            selected.x = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
-            selected.y = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
+            const newX = Math.max(0, Math.min(GRID_COLS - selected.w, this._origX + dx));
+            const newY = Math.max(0, Math.min(GRID_ROWS - selected.h, this._origY + dy));
+            // Shift group children by the same delta
+            if (selected.type === 'group' && selected.children) {
+                const shiftX = newX - selected.x;
+                const shiftY = newY - selected.y;
+                for (const child of selected.children) {
+                    child.x += shiftX;
+                    child.y += shiftY;
+                }
+            }
+            selected.x = newX;
+            selected.y = newY;
             app.render();
             return;
         }
@@ -2415,6 +2507,18 @@ class SelectTool extends BaseTool {
         y = Math.max(0, y);
         if (x + w > GRID_COLS) w = GRID_COLS - x;
         if (y + h > GRID_ROWS) h = GRID_ROWS - y;
+
+        // Shift group children when position changes (n/w resize)
+        if (comp.type === 'group' && comp.children) {
+            const shiftX = x - comp.x;
+            const shiftY = y - comp.y;
+            if (shiftX !== 0 || shiftY !== 0) {
+                for (const child of comp.children) {
+                    child.x += shiftX;
+                    child.y += shiftY;
+                }
+            }
+        }
 
         comp.x = x;
         comp.y = y;
@@ -3135,12 +3239,45 @@ class InspectorUI {
 }
 
 // --- ui/layers.js ---
-// === Layers Panel: component list with visibility/reorder ===
+// === Layers Panel: component list with visibility/reorder + group/ungroup ===
 
 class LayersUI {
     constructor(app) {
         this.app = app;
         this._container = document.getElementById('layers-content');
+        this._checked = new Set();
+        this._buildHeader();
+    }
+
+    _buildHeader() {
+        const section = document.getElementById('layers-section');
+        const header = section.querySelector('.panel-header');
+
+        const btnRow = document.createElement('div');
+        btnRow.style.cssText = 'display:flex; gap:4px; padding:2px 10px 4px;';
+
+        const mkBtn = document.createElement('button');
+        mkBtn.className = 'layer-btn';
+        mkBtn.textContent = 'MkLayer';
+        mkBtn.title = 'Group checked layers';
+        mkBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
+        mkBtn.addEventListener('click', () => {
+            this.app.mkLayer(this._checked);
+            this._checked.clear();
+        });
+
+        const deBtn = document.createElement('button');
+        deBtn.className = 'layer-btn';
+        deBtn.textContent = 'DeLayer';
+        deBtn.title = 'Ungroup selected group';
+        deBtn.style.cssText = 'font-size:10px; padding:2px 6px; border:1px solid #45475a; border-radius:3px;';
+        deBtn.addEventListener('click', () => {
+            this.app.deLayer();
+        });
+
+        btnRow.appendChild(mkBtn);
+        btnRow.appendChild(deBtn);
+        header.after(btnRow);
     }
 
     update() {
@@ -3151,23 +3288,75 @@ class LayersUI {
             .sort((a, b) => b.zIndex - a.zIndex);
 
         for (const comp of sorted) {
-            const item = document.createElement('div');
-            item.className = 'layer-item' + (this.app.selectedComponent === comp ? ' selected' : '');
+            this._buildLayerItem(comp, false);
 
-            const vis = document.createElement('span');
-            vis.className = 'vis-toggle';
-            vis.textContent = comp.visible ? '■' : '□';
+            // If group, show children indented
+            if (comp.type === 'group' && comp.children) {
+                for (const child of comp.children) {
+                    this._buildLayerItem(child, true);
+                }
+            }
+        }
+
+        if (sorted.length === 0) {
+            const empty = document.createElement('div');
+            empty.style.cssText = 'padding: 10px; color: #6c7086; font-size: 11px;';
+            empty.textContent = 'No components';
+            this._container.appendChild(empty);
+        }
+    }
+
+    _buildLayerItem(comp, isChild) {
+        const item = document.createElement('div');
+        item.className = 'layer-item' + (this.app.selectedComponent === comp ? ' selected' : '');
+
+        if (isChild) {
+            // Indented child row — read-only, no checkbox
+            const indent = document.createElement('span');
+            indent.style.cssText = 'color:#6c7086; font-size:10px; width:28px; text-align:right; flex-shrink:0;';
+            indent.textContent = '└';
+            item.appendChild(indent);
+        } else {
+            // Checkbox for multi-select
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.checked = this._checked.has(comp.id);
+            cb.style.cssText = 'margin:0; flex-shrink:0; cursor:pointer; accent-color:#89b4fa;';
+            cb.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (cb.checked) {
+                    this._checked.add(comp.id);
+                } else {
+                    this._checked.delete(comp.id);
+                }
+            });
+            item.appendChild(cb);
+        }
+
+        const vis = document.createElement('span');
+        vis.className = 'vis-toggle';
+        vis.textContent = comp.visible ? '■' : '□';
+        if (!isChild) {
             vis.addEventListener('click', (e) => {
                 e.stopPropagation();
                 comp.visible = !comp.visible;
                 this.app.render();
                 this.update();
             });
+        }
 
-            const name = document.createElement('span');
-            name.className = 'layer-name';
-            name.textContent = comp.name;
+        const name = document.createElement('span');
+        name.className = 'layer-name';
+        name.textContent = comp.name;
+        if (isChild) {
+            name.style.color = '#6c7086';
+            name.style.fontSize = '11px';
+        }
 
+        item.appendChild(vis);
+        item.appendChild(name);
+
+        if (!isChild) {
             const actions = document.createElement('span');
             actions.className = 'layer-actions';
 
@@ -3205,24 +3394,14 @@ class LayersUI {
             actions.appendChild(upBtn);
             actions.appendChild(downBtn);
             actions.appendChild(delBtn);
-
-            item.appendChild(vis);
-            item.appendChild(name);
             item.appendChild(actions);
 
             item.addEventListener('click', () => {
                 this.app.selectComponent(comp);
             });
-
-            this._container.appendChild(item);
         }
 
-        if (sorted.length === 0) {
-            const empty = document.createElement('div');
-            empty.style.cssText = 'padding: 10px; color: #6c7086; font-size: 11px;';
-            empty.textContent = 'No components';
-            this._container.appendChild(empty);
-        }
+        this._container.appendChild(item);
     }
 }
 
@@ -3667,6 +3846,64 @@ class App {
         this._toast('Rotated');
     }
 
+    // === Group / Ungroup ===
+
+    mkLayer(checkedIds) {
+        const targets = this.components.filter(c => checkedIds.has(c.id) && c.name !== '_freehand');
+        if (targets.length < 2) {
+            this._toast('Check at least 2 layers to group');
+            return;
+        }
+        this.pushUndo();
+
+        // Compute bounding box
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const c of targets) {
+            minX = Math.min(minX, c.x);
+            minY = Math.min(minY, c.y);
+            maxX = Math.max(maxX, c.x + c.w);
+            maxY = Math.max(maxY, c.y + c.h);
+        }
+
+        const group = ComponentRegistry.create('group', minX, minY);
+        group.w = maxX - minX;
+        group.h = maxY - minY;
+        group.children = targets;
+
+        // Remove children from top-level components
+        this.components = this.components.filter(c => !checkedIds.has(c.id));
+        group.zIndex = this.components.length;
+        this.components.push(group);
+        this.selectComponent(group);
+        this.render();
+        this._toast('Grouped ' + targets.length + ' layers');
+    }
+
+    deLayer() {
+        const sel = this.selectedComponent;
+        if (!sel || sel.type !== 'group') {
+            this._toast('Select a group to ungroup');
+            return;
+        }
+        this.pushUndo();
+
+        const children = sel.children;
+        const idx = this.components.indexOf(sel);
+        if (idx >= 0) this.components.splice(idx, 1);
+
+        for (const child of children) {
+            child.zIndex = this.components.length;
+            this.components.push(child);
+        }
+
+        this.selectedComponent = null;
+        this.inspectorUI.update(null);
+        this.layersUI.update();
+        this.statusBarUI.updateCount(this.components.filter(c => c.name !== '_freehand').length);
+        this.render();
+        this._toast('Ungrouped ' + children.length + ' layers');
+    }
+
     // === File Operations ===
 
     saveToFile() {
@@ -3813,6 +4050,8 @@ class App {
     _autoSave() {
         if (this.components.length > 0) {
             ExportUtils.saveToLocalStorage(this.components);
+        } else {
+            localStorage.removeItem('kaomoji_project');
         }
     }
 
