@@ -9,7 +9,7 @@ A browser-based ASCII wireframe editor for designing UI mockups using Unicode bo
 - **20 UI component types**: Button, Input, Box, Card, Table, Modal, Tabs, NavBar, Dropdown, Search, Checkbox, Radio, Toggle, Progress, Breadcrumb, Pagination, TextBox, Line, Arrow, Separator
 - **5 border styles**: single (`┌─┐`), heavy (`┏━┓`), double (`╔═╗`), rounded (`╭─╮`), ASCII (`+-+`)
 - **Interactive tools**: Select/Move/Resize, Pencil, Eraser, Brush for freehand drawing
-- **Full editor UI**: Inspector panel, Layers panel with z-ordering, drag-and-drop from palette
+- **Full editor UI**: Inspector panel, Components panel with z-ordering, drag-and-drop from palette
 - **Multi-select**: Shift+click or marquee to select multiple components, drag together
 - **Groups**: Group/Degroup selected components (Ctrl+G / Ctrl+Shift+G)
 - **Smart border merge**: Overlapping box-drawing characters merge into correct junctions (corners → tees → crosses)
@@ -26,7 +26,7 @@ Open `src/index.html` in a browser. Scripts load via individual `<script>` tags.
 ### Production (single file)
 ```bash
 bash build.sh
-# Output: dist/kaomoji-markdown-design.html (~150KB)
+# Output: dist/kaomoji-markdown-design.html (~164KB)
 open dist/kaomoji-markdown-design.html
 ```
 
@@ -44,10 +44,41 @@ App (orchestrator)
 ├── EventBus (pub/sub)
 ├── Tools (Select, Pencil, Eraser, Brush)
 ├── Components (20 types via ComponentRegistry)
-└── UI Panels (Toolbar, Palette, Inspector, Layers, StatusBar)
+├── UI Panels (Toolbar, Palette, Inspector, Components, StatusBar)
+└── MCP Bridge (WebSocket client ↔ Python MCP server)
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the full development plan.
+
+## MCP Server (Claude Code Integration)
+
+The included MCP server (`mcp/`) lets [Claude Code](https://claude.ai/claude-code) programmatically create and manipulate wireframes via tool calls. Python WebSocket server on port 9878; the browser app auto-connects as a client.
+
+**17 tools**: `kaomoji_status`, `kaomoji_list_components`, `kaomoji_add_component`, `kaomoji_delete_component`, `kaomoji_move_component`, `kaomoji_resize_component`, `kaomoji_set_props`, `kaomoji_get_component`, `kaomoji_select`, `kaomoji_group`, `kaomoji_undo_redo`, `kaomoji_export`, `kaomoji_import_json`, `kaomoji_export_json`, `kaomoji_clear`, `kaomoji_pencil`, `kaomoji_eraser`
+
+### Setup
+
+```bash
+# Create venv and install dependencies
+cd mcp && python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Register in Claude Code config (~/.claude.json)
+# Add under "mcpServers":
+#   "kaomoji": {
+#     "type": "stdio",
+#     "command": "<path-to>/mcp/venv/bin/python",
+#     "args": ["<path-to>/mcp/server.py"]
+#   }
+
+# Restart Claude Code, open the editor in a browser, then use kaomoji_* tools
+```
+
+### Run Tests
+
+```bash
+cd mcp && source venv/bin/activate && pytest tests/ -v
+```
 
 ## Dependencies
 

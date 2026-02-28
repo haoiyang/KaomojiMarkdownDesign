@@ -1157,11 +1157,22 @@ KaomojiMarkdownDesign/
 │       ├── statusbar.js               (class StatusBarUI)
 │       ├── app.js                     (class App + DOMContentLoaded bootstrap)
 │       └── bridge.js                  (class KaomojiBridge — WebSocket MCP client)
+├── mcp/                               (MCP server for Claude Code integration)
+│   ├── server.py                      (MCP entry point: list_tools + call_tool)
+│   ├── tool_handlers.py               (17 async handlers + TOOL_REGISTRY)
+│   ├── kaomoji_bridge.py              (WebSocket server on port 9878)
+│   ├── resource_handlers.py           (placeholder)
+│   ├── requirements.txt               (mcp>=1.0.0, websockets>=12.0)
+│   └── tests/                         (50 pytest tests)
+│       ├── conftest.py
+│       ├── test_bridge.py
+│       ├── test_server.py
+│       └── test_tool_handlers.py
 └── dist/
     └── kaomoji-markdown-design.html   (single-file output, ~164KB)
 ```
 
-**Total: 46 JS files + 1 HTML + 1 build script = 48 source files**
+**Total: 46 JS files + 1 HTML + 1 build script + 5 MCP Python files = 53 source files**
 
 #### Script Load Order (in index.html)
 ```
