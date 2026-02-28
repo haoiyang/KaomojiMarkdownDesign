@@ -2,7 +2,7 @@
 
 ## 1. Project Overview
 
-Browser-based ASCII wireframe editor for designing UI mockups using Unicode box-drawing characters. Compiles into a single portable HTML file (150KB) with zero external dependencies. Inspired by [mockdown.design](https://www.mockdown.design/).
+Browser-based ASCII wireframe editor for designing UI mockups using Unicode box-drawing characters. Compiles into a single portable HTML file (164KB) with zero external dependencies. Inspired by [mockdown.design](https://www.mockdown.design/).
 
 `$PROJECT_ROOT` = this directory (`${PYTHON_WS}/KaomojiMarkdownDesign`)
 
@@ -41,9 +41,10 @@ bash $PROJECT_ROOT/build.sh
 | `src/ui/toolbar.js` | `ToolbarUI`: top button bar binding |
 | `src/ui/palette.js` | `PaletteUI`: left panel tools + element library |
 | `src/ui/inspector.js` | `InspectorUI`: right panel property editor |
-| `src/ui/layers.js` | `LayersUI`: right panel layer list |
+| `src/ui/layers.js` | `LayersUI`: right panel component list (header: "Components") |
 | `src/ui/statusbar.js` | `StatusBarUI`: bottom info bar |
-| `build.sh` | Bash script: concatenate 40 JS files into single HTML |
+| `src/ui/bridge.js` | `KaomojiBridge`: WebSocket client for MCP server communication |
+| `build.sh` | Bash script: concatenate 46 JS files into single HTML |
 | `dist/kaomoji-markdown-design.html` | Portable single-file output |
 
 ---
@@ -707,7 +708,7 @@ No CLI — browser-only application.
 │ Line   │         80 × 40 ASCII Canvas            │  W: 20 H: 8  │
 │ Arrow  │                                         │  Border: ─    │
 │────────│     (monospace character grid)           │───────────────│
-│ ELEMS  │                                         │  LAYERS       │
+│ ELEMS  │                                         │  COMPONENTS   │
 │────────│      flex:1, overflow:auto               │───────────────│
 │ Button │      bg: #11111b, padding:16px          │  ■ Card    ×  │
 │ Input  │                                         │  □ Modal   ×  │
@@ -768,7 +769,7 @@ Layout: body is flex column (100vh)
         <div class="panel-header">INSPECTOR</div>
         <div id="inspector-content">
       <div id="layers-section" class="panel-section">
-        <div class="panel-header">LAYERS</div>
+        <div class="panel-header">Components</div>
         <div id="layers-content">
 
   <div id="statusbar"> (flex row, h:24px, bg:#11111b)
@@ -1154,12 +1155,13 @@ KaomojiMarkdownDesign/
 │       ├── inspector.js               (class InspectorUI)
 │       ├── layers.js                  (class LayersUI)
 │       ├── statusbar.js               (class StatusBarUI)
-│       └── app.js                     (class App + DOMContentLoaded bootstrap)
+│       ├── app.js                     (class App + DOMContentLoaded bootstrap)
+│       └── bridge.js                  (class KaomojiBridge — WebSocket MCP client)
 └── dist/
-    └── kaomoji-markdown-design.html   (single-file output, ~99KB)
+    └── kaomoji-markdown-design.html   (single-file output, ~164KB)
 ```
 
-**Total: 40 JS files + 1 HTML + 1 build script = 42 source files**
+**Total: 46 JS files + 1 HTML + 1 build script = 48 source files**
 
 #### Script Load Order (in index.html)
 ```
@@ -1203,12 +1205,13 @@ KaomojiMarkdownDesign/
 38. ui/layers.js
 39. ui/statusbar.js
 40. ui/app.js
+41. ui/bridge.js
 ```
 
 #### Build Script (`build.sh`)
 ```bash
 # Reads index.html, extracts content before/after INJECT markers
-# Concatenates all 40 JS files (in order above) into temp file
+# Concatenates all 46 JS files (in order above) into temp file
 # Outputs: sed (before marker) + <script> + JS + </script> + sed (after marker)
 # Uses sed -n for line ranges, not awk (avoids newline-in-variable issues)
 ```
@@ -1352,8 +1355,9 @@ Manual testing checklist:
 - [x] Phase 4: Tools — `base.js`, `select.js`, `pencil.js`, `eraser.js`, `brush.js`
 - [x] Phase 5: UI Panels — `eventbus.js`, `toolbar.js`, `palette.js`, `inspector.js`, `layers.js`, `statusbar.js`, `app.js`
 - [x] Phase 6: Features — Undo/redo wiring, keyboard shortcuts, Copy Markdown, Save/Load, copy/paste/cut, inline text editing, auto-save, drag-and-drop
-- [x] Phase 7: Build script (`build.sh`), single-file output (`dist/kaomoji-markdown-design.html` 99KB), `CLAUDE.md`, `README.md`
+- [x] Phase 7: Build script (`build.sh`), single-file output (`dist/kaomoji-markdown-design.html` 164KB), `CLAUDE.md`, `README.md`
 - [x] Phase 8: Box-drawing merge system, group paste fix, inline editing for all elements
+- [x] Phase 9: MCP bridge (`bridge.js`), Delete button in Components panel, rename Layers→Components
 
 ---
 
@@ -1368,3 +1372,4 @@ Manual testing checklist:
 | 1.4 | 2026-02-27 | Added missing 2.7.2 UI Layout ASCII diagram | Visual spatial layout was in original plan but lost during CLAUDE.md creation. Added ASCII wireframe with panel dimensions (toolbar 40px, left 160px, canvas flex:1, right 200px, statusbar 24px). Renumbered 2.7.3→HTML Structure, 2.7.4→CSS, 2.7.5→Canvas | Section 2.7 expanded |
 | 1.5 | 2026-02-28 | Box-drawing character merge system | Fix overlapping component borders breaking at junctions | Added 4-direction (U/D/L/R) merge system in boxdraw.js; updated mergeLineChars; added sections 2.4.11, 2.5 entries |
 | 1.6 | 2026-02-28 | Group paste fix + Codex review | Fix group children not getting new IDs/positions on paste; review per Section D | Fixed clone()/pasteClipboard() child ID+position; Tier 2.1 guard fix; sections 2.13.2-2.13.3 updated |
+| 1.7 | 2026-03-01 | MCP bridge + UI updates | Add WebSocket bridge for KaomojiMCP, Delete button in components panel, rename Layers→Components | Added bridge.js (17 commands), updated layers.js (Delete btn), index.html (header rename). Sections 2.5, 2.7.2, 2.7.3, 2.11, 2.15 updated. File count 40→46, dist 99→164KB |
