@@ -153,3 +153,9 @@ See [CLAUDE.md](CLAUDE.md) for the full development plan.
 | Delete / Backspace | Delete selected |
 | Escape | Deselect |
 | Double-click | Edit text inline |
+
+## License
+
+This project is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (Creative Commons Attribution-NonCommercial 4.0 International).
+
+You are free to use, share, and adapt this work for **non-commercial purposes**, as long as you give appropriate credit. If this project inspires your own work or helps shape your ideas, a mention or link back is always appreciated.
