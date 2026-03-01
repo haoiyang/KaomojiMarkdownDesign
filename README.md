@@ -154,6 +154,10 @@ See [CLAUDE.md](CLAUDE.md) for the full development plan.
 | Escape | Deselect |
 | Double-click | Edit text inline |
 
+## Acknowledgments
+
+Inspired by [Mockdown](https://www.mockdown.design/) — a beautiful ASCII wireframe design tool. Thank you for the original idea that sparked this project.
+
 ## License
 
 This project is licensed under [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) (Creative Commons Attribution-NonCommercial 4.0 International).
